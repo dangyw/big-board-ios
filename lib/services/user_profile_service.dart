@@ -1,69 +1,136 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
+import 'dart:io';
+import 'package:path/path.dart' as path;
 
 class UserProfileService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Create initial profile for new users
-  Future<void> createInitialProfile(User user) async {
-    final profile = UserProfile(
-      userId: user.uid,
-      displayName: user.displayName ?? 'User',
-      email: user.email,
-      photoURL: user.photoURL,
-      createdAt: DateTime.now(),
-    );
-
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .set(profile.toMap());
+  Future<UserProfile?> getProfile(String userId) async {
+    try {
+      final response = await _supabase
+          .from('user_profiles')
+          .select()
+          .eq('user_id', userId)
+          .single();
+      
+      if (response != null) {
+        return UserProfile.fromMap(response, userId);
+      }
+      return null;
+    } catch (e) {
+      print('Error getting profile: $e');
+      return null;
+    }
   }
 
-  // Get user profile stream
-  Stream<UserProfile?> getUserProfile() {
-    final user = _auth.currentUser;
-    if (user == null) return Stream.value(null);
-
-    return _firestore
-        .collection('users')
-        .doc(user.uid)
-        .snapshots()
-        .map((doc) => doc.exists ? UserProfile.fromMap(doc.data()!, doc.id) : null);
+  Future<void> createInitialProfile(UserProfile profile) async {
+    try {
+      await _supabase.from('user_profiles').insert({
+        'user_id': profile.userId,
+        'display_name': profile.displayName,
+        'email': profile.email,
+        'photo_url': profile.photoURL,
+        'unit_value': profile.unitValue,
+        'created_at': profile.createdAt.toIso8601String(),
+        'joined_at': profile.joinedAt.toIso8601String(),
+        'bankroll': 0.0,
+        'parlay_count': 0,
+      });
+    } catch (e) {
+      print('Error creating profile: $e');
+      rethrow;
+    }
   }
 
-  // Update unit value
-  Future<void> updateUnitValue(double unitValue) async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .update({'unitValue': unitValue});
+  Future<void> updateProfile(UserProfile profile) async {
+    try {
+      await _supabase
+          .from('user_profiles')
+          .update(profile.toMap())
+          .eq('user_id', profile.userId);
+    } catch (e) {
+      print('Error updating profile: $e');
+      rethrow;
+    }
   }
 
-  // Update bankroll
-  Future<void> updateBankroll(double bankroll) async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .update({'bankroll': bankroll});
+  Stream<UserProfile?> streamProfile(String userId) {
+    return _supabase
+        .from('user_profiles')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .map((data) => data.isNotEmpty 
+            ? UserProfile.fromMap(data.first, userId)
+            : null);
   }
 
-  // Increment parlay count
-  Future<void> incrementParlayCount() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
+  Future<void> updateBankroll(String userId, double newAmount) async {
+    try {
+      await _supabase
+          .from('user_profiles')
+          .update({'bankroll': newAmount})
+          .eq('user_id', userId);
+    } catch (e) {
+      print('Error updating bankroll: $e');
+      rethrow;
+    }
+  }
 
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .update({'parlayCount': FieldValue.increment(1)});
+  Future<void> incrementParlayCount(String userId) async {
+    try {
+      await _supabase.rpc(
+        'increment_parlay_count',
+        params: {'user_id_param': userId}
+      );
+    } catch (e) {
+      print('Error incrementing parlay count: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> hasProfile(String userId) async {
+    try {
+      final response = await _supabase
+          .from('user_profiles')
+          .select('user_id')
+          .eq('user_id', userId)
+          .single();
+      return response != null;
+    } catch (e) {
+      print('Error checking profile: $e');
+      return false;
+    }
+  }
+
+  Future<String?> uploadProfileImage(String filePath) async {
+    try {
+      final fileName = '${DateTime.now().toIso8601String()}_${path.basename(filePath)}';
+      final file = File(filePath);
+      
+      // Upload to Supabase Storage
+      final response = await _supabase
+          .storage
+          .from('profile-images')  // Create this bucket in Supabase
+          .upload(fileName, file);
+
+      // Get public URL
+      final imageUrl = _supabase
+          .storage
+          .from('profile-images')
+          .getPublicUrl(fileName);
+
+      return imageUrl;
+    } catch (e) {
+      print('Error uploading profile image: $e');
+      return null;
+    }
+  }
+
+  Future<void> updateProfileImage(String userId, String imageUrl) async {
+    await _supabase
+        .from('profiles')
+        .update({'photo_url': imageUrl})
+        .eq('user_id', userId);
   }
 } 

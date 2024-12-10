@@ -9,19 +9,24 @@ import 'saved_parlays_screen.dart';
 import '../utils/odds_calculator.dart';
 import '../widgets/save_parlay_modal.dart';
 import 'settings/profile_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase, User;
+import 'auth/sign_in_screen.dart';
 
 class MainScreen extends StatefulWidget {
+  const MainScreen({Key? key}) : super(key: key);
+
   @override
   _MainScreenState createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
+  User? get currentUser => Supabase.instance.client.auth.currentUser;
   final ScrollController _scrollController = ScrollController();
+  final ParlayService _parlayService = ParlayService();
   List<Game> games = [];
   String searchQuery = '';
   bool isLoading = false;
   Set<String> selectedPicks = {};
-  final ParlayService _parlayService = ParlayService();
   double _cardHeight = 200;  // Default height (middle ground)
   double _minHeight = 80;    // Minimum height
   double _maxHeight = 400;   // Maximum height
@@ -119,6 +124,7 @@ class _MainScreenState extends State<MainScreen> {
         totalOdds: totalOdds,
         onSave: (amount) async {
           final parlay = SavedParlay(
+            userId: currentUser!.id,
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             createdAt: DateTime.now(),
             picks: picks,
@@ -217,6 +223,27 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: Text('Big Board'),
         actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () async {
+              try {
+                await Supabase.instance.client.auth.signOut();
+                if (mounted) {
+                  // Navigate to SignInScreen and remove all previous routes
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => SignInScreen()),
+                    (route) => false,  // This removes all previous routes
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error signing out')),
+                  );
+                }
+              }
+            },
+          ),
           IconButton(
             icon: Icon(Icons.settings),
             onPressed: () {

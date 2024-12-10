@@ -14,12 +14,17 @@ class ProfileScreen extends StatelessWidget {
       body: StreamBuilder<UserProfile?>(
         stream: context.read<UserProfileProvider>().profileStream,
         builder: (context, snapshot) {
+          print('StreamBuilder state: ${snapshot.connectionState}'); // Debug print
+          print('StreamBuilder data: ${snapshot.data}'); // Debug print
+          print('StreamBuilder error: ${snapshot.error}'); // Debug print
+          
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
           }
 
           final profile = snapshot.data;
           if (profile == null) {
+            print('Profile is null'); // Debug print
             return Center(child: Text('Error loading profile'));
           }
 

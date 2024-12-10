@@ -21,19 +21,23 @@ class SaveParlayModal extends StatefulWidget {
 class _SaveParlayModalState extends State<SaveParlayModal> {
   final _amountController = TextEditingController();
   double _potentialPayout = 0;
+  String? _errorMessage;
 
   void _calculatePayout(String value) {
-    if (value.isEmpty) {
-      setState(() => _potentialPayout = 0);
-      return;
-    }
+    setState(() {
+      _errorMessage = null;
+      if (value.isEmpty) {
+        _potentialPayout = 0;
+        return;
+      }
 
-    final amount = double.tryParse(value) ?? 0;
-    final decimal = widget.totalOdds > 0 
-        ? (widget.totalOdds / 100) + 1
-        : 1 - (100 / widget.totalOdds);
-    
-    setState(() => _potentialPayout = amount * decimal);
+      final amount = double.tryParse(value) ?? 0;
+      final decimal = widget.totalOdds > 0 
+          ? (widget.totalOdds / 100) + 1
+          : 1 - (100 / widget.totalOdds);
+      
+      _potentialPayout = amount * decimal;
+    });
   }
 
   @override
@@ -97,6 +101,17 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
                 color: Colors.green,
               ),
             ),
+            if (_errorMessage != null)
+              Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
             SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -109,6 +124,12 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
                 ElevatedButton(
                   onPressed: () {
                     final amount = double.tryParse(_amountController.text) ?? 0;
+                    if (amount <= 0) {
+                      setState(() {
+                        _errorMessage = 'Please enter a valid amount';
+                      });
+                      return;
+                    }
                     widget.onSave(amount);
                     Navigator.pop(context);
                   },

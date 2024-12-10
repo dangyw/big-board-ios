@@ -1,47 +1,83 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/saved_parlay.dart';
+import 'dart:async';
 
 class ParlayService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final _supabase = Supabase.instance.client;
+  final _streamController = StreamController<List<SavedParlay>>.broadcast();
 
   Future<void> saveParlay(SavedParlay parlay) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('User not authenticated');
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
 
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('parlays')
-        .doc(parlay.id)
-        .set(parlay.toJson());
+      final parlayJson = parlay.toJson();
+      parlayJson.remove('id');  // Remove the id field and let Supabase generate it
+
+      await _supabase
+          .from('parlays')
+          .insert(parlayJson);
+    } catch (e) {
+      print('Error saving parlay: $e');
+      rethrow;
+    }
   }
 
   Stream<List<SavedParlay>> getParlays() {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('User not authenticated');
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
 
-    return _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('parlays')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => SavedParlay.fromJson(doc.data()))
-            .toList());
+      // Initial load and setup stream
+      _refreshParlays();
+
+      return _streamController.stream;
+    } catch (e) {
+      print('Error in getParlays: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _refreshParlays() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final data = await _supabase
+          .from('parlays')
+          .select()
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false);
+
+      final parlays = data.map((json) => SavedParlay.fromJson(json)).toList();
+      _streamController.add(parlays);
+    } catch (e) {
+      print('Error refreshing parlays: $e');
+    }
   }
 
   Future<void> deleteParlay(String parlayId) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('User not authenticated');
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) throw Exception('User not authenticated');
 
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .collection('parlays')
-        .doc(parlayId)
-        .delete();
+      await _supabase
+          .from('parlays')
+          .delete()
+          .eq('id', parlayId);
+        
+      print('Parlay deleted successfully: $parlayId');
+      
+      // Force refresh after delete
+      await _refreshParlays();
+      
+    } catch (e) {
+      print('Error deleting parlay: $e');
+      rethrow;
+    }
+  }
+
+  void dispose() {
+    _streamController.close();
   }
 } 

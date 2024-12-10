@@ -3,8 +3,61 @@ import '../models/saved_parlay.dart';
 import '../services/parlay_service.dart';
 import '../utils/odds_calculator.dart';
 
-class SavedParlaysScreen extends StatelessWidget {
+class SavedParlaysScreen extends StatefulWidget {
+  @override
+  _SavedParlaysScreenState createState() => _SavedParlaysScreenState();
+}
+
+class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
   final ParlayService _parlayService = ParlayService();
+
+  @override
+  void dispose() {
+    _parlayService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirmAndDeleteParlay(BuildContext context, String parlayId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Delete Parlay'),
+          content: Text('Are you sure you want to delete this parlay?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      try {
+        await _parlayService.deleteParlay(parlayId);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Parlay deleted successfully')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting parlay: $e')),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +68,12 @@ class SavedParlaysScreen extends StatelessWidget {
       body: StreamBuilder<List<SavedParlay>>(
         stream: _parlayService.getParlays(),
         builder: (context, snapshot) {
+          print('Stream builder update - hasData: ${snapshot.hasData}, '
+              'dataLength: ${snapshot.data?.length}, '
+              'connectionState: ${snapshot.connectionState}');
+              
           if (snapshot.hasError) {
+            print('Stream error: ${snapshot.error}');
             return Center(child: Text('Error loading parlays'));
           }
 
@@ -24,6 +82,7 @@ class SavedParlaysScreen extends StatelessWidget {
           }
 
           final parlays = snapshot.data ?? [];
+          print('Rendering ${parlays.length} parlays');
           
           if (parlays.isEmpty) {
             return Center(
@@ -103,7 +162,7 @@ class SavedParlaysScreen extends StatelessWidget {
                     ButtonBar(
                       children: [
                         TextButton(
-                          onPressed: () => _parlayService.deleteParlay(parlay.id),
+                          onPressed: () => _confirmAndDeleteParlay(context, parlay.id),
                           child: Text(
                             'Delete',
                             style: TextStyle(color: Colors.red),
