@@ -1,1 +1,0 @@
-{"flutter":{"platforms":{"ios":{"buildConfigurations":{"Debug":{"projectId":"big-board-ios","appId":"1:423438436685:ios:ae90231da68a3c0f5ccf04","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}}},"dart":{"lib/firebase_options.dart":{"projectId":"big-board-ios","configurations":{"ios":"1:423438436685:ios:ae90231da68a3c0f5ccf04"}}}}}}

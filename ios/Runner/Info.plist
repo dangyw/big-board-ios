@@ -45,5 +45,20 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.bigboard.ios</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to photo library for profile image selection</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to camera for profile image capture</string>
 </dict>
 </plist>
