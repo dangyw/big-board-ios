@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:big_board/config/supabase_config.dart';
 import 'package:provider/provider.dart';
-import 'package:big_board/services/auth_service.dart';
-import 'package:big_board/providers/user_profile_provider.dart';
-import 'package:big_board/screens/create_profile_screen.dart';
-import 'package:big_board/screens/auth/sign_in_screen.dart';  // Use this instead
-import 'package:big_board/screens/main_screen.dart';  // Your main app screen
-import 'package:big_board/widgets/auth_wrapper.dart';
-import 'package:big_board/services/user_profile_service.dart';
+import 'package:big_board/core/config/supabase_config.dart';
+import 'package:big_board/features/auth/services/auth_service.dart';
+import 'package:big_board/features/auth/screens/sign_in_screen.dart';
+import 'package:big_board/features/auth/widgets/auth_guard.dart';
+import 'package:big_board/features/profile/services/user_profile_service.dart';
+import 'package:big_board/features/profile/services/user_profile_provider.dart';
+import 'package:big_board/features/profile/screens/create_profile_screen.dart';
+import 'package:big_board/features/parlays/screens/main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +45,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           primarySwatch: Colors.blue,
         ),
-        home: AuthWrapper(),
+        home: AuthGuard(),
       ),
     );
   }
