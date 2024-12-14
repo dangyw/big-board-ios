@@ -4,6 +4,13 @@ import 'package:big_board/features/parlays/services/parlay_service.dart';
 import 'package:big_board/core/utils/odds_calculator.dart';
 
 class SavedParlaysScreen extends StatefulWidget {
+  final String? groupId;
+  
+  const SavedParlaysScreen({
+    Key? key,
+    this.groupId,
+  }) : super(key: key);
+
   @override
   _SavedParlaysScreenState createState() => _SavedParlaysScreenState();
 }
@@ -12,82 +19,56 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
   final ParlayService _parlayService = ParlayService();
 
   @override
-  void dispose() {
-    _parlayService.dispose();
-    super.dispose();
-  }
-
-  Future<void> _confirmAndDeleteParlay(BuildContext context, String parlayId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Delete Parlay'),
-          content: Text('Are you sure you want to delete this parlay?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                'Delete',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true) {
-      try {
-        await _parlayService.deleteParlay(parlayId);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Parlay deleted successfully')),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting parlay: $e')),
-          );
-        }
-      }
-    }
+  void initState() {
+    super.initState();
+    print('SavedParlaysScreen initialized - groupId: ${widget.groupId}');
   }
 
   @override
   Widget build(BuildContext context) {
+    print('SavedParlaysScreen building - groupId: ${widget.groupId}');
     return Scaffold(
       appBar: AppBar(
-        title: Text('Saved Parlays'),
+        title: Text(widget.groupId != null ? 'Group Parlays' : 'My Parlays'),
       ),
       body: StreamBuilder<List<SavedParlay>>(
-        stream: _parlayService.getParlays(),
+        stream: _parlayService.getParlays(groupId: widget.groupId),
         builder: (context, snapshot) {
-          print('Stream builder update - hasData: ${snapshot.hasData}, '
-              'dataLength: ${snapshot.data?.length}, '
-              'connectionState: ${snapshot.connectionState}');
+          print('SavedParlaysScreen StreamBuilder update:'
+              '\n  - connectionState: ${snapshot.connectionState}'
+              '\n  - hasData: ${snapshot.hasData}'
+              '\n  - hasError: ${snapshot.hasError}'
+              '\n  - error: ${snapshot.error}'
+              '\n  - stackTrace: ${snapshot.stackTrace}'
+              '\n  - dataLength: ${snapshot.data?.length}');
               
           if (snapshot.hasError) {
-            print('Stream error: ${snapshot.error}');
-            return Center(child: Text('Error loading parlays'));
+            print('SavedParlaysScreen error: ${snapshot.error}');
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Error loading parlays'),
+                  if (snapshot.error != null)
+                    Text(
+                      snapshot.error.toString(),
+                      style: TextStyle(fontSize: 12, color: Colors.red),
+                    ),
+                ],
+              ),
+            );
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
+            print('SavedParlaysScreen showing loading indicator');
             return Center(child: CircularProgressIndicator());
           }
 
           final parlays = snapshot.data ?? [];
-          print('Rendering ${parlays.length} parlays');
+          print('SavedParlaysScreen received ${parlays.length} parlays');
           
           if (parlays.isEmpty) {
-            return Center(
-              child: Text('No saved parlays yet'),
-            );
+            return Center(child: Text('No saved parlays yet'));
           }
 
           return ListView.builder(
@@ -99,9 +80,7 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
                 child: ExpansionTile(
                   title: Text(
                     '${parlay.picks.length} Team Parlay',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,35 +107,23 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(pick.betType),
                           Text(
-                            pick.betType,
+                            'vs ${pick.opponent}',
                             style: TextStyle(
                               color: Colors.grey[600],
-                              fontSize: 12,
                             ),
                           ),
-                          Row(
-                            children: [
-                              Text(
-                                pick.betType == 'Spread'
-                                    ? '${pick.spreadValue} (${OddsCalculator.formatOdds(pick.odds)})'
-                                    : OddsCalculator.formatOdds(pick.odds),
-                                style: TextStyle(
-                                  color: Colors.blue[700],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'vs ${pick.opponent}',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
+                      ),
+                      trailing: Text(
+                        pick.betType == 'Spread'
+                            ? '${pick.spreadValue} (${OddsCalculator.formatOdds(pick.odds)})'
+                            : OddsCalculator.formatOdds(pick.odds),
+                        style: TextStyle(
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     )),
                     ButtonBar(
@@ -180,22 +147,47 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
     );
   }
 
-  String _formatDate(DateTime dateTime) {
-    final localTime = dateTime.toLocal();
-    
-    // Get day of week
-    final days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    final dayOfWeek = days[localTime.weekday % 7];
-    
-    // Get month
-    final months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                   'July', 'August', 'September', 'October', 'November', 'December'];
-    final month = months[localTime.month - 1];
-    
-    final day = localTime.day;
-    final hour = localTime.hour.toString().padLeft(2, '0');
-    final minute = localTime.minute.toString().padLeft(2, '0');
-    
-    return '$dayOfWeek, $month $day - $hour:$minute';
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
+  }
+
+  Future<void> _confirmAndDeleteParlay(BuildContext context, String parlayId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Parlay'),
+        content: Text('Are you sure you want to delete this parlay?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _parlayService.deleteParlay(parlayId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Parlay deleted')),
+        );
+      } catch (e) {
+        print('Error deleting parlay: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting parlay')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _parlayService.dispose();
+    super.dispose();
   }
 } 

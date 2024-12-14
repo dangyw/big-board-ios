@@ -6,20 +6,55 @@ class GroupsService {
 
   Future<List<Group>> getUserGroups(String userId) async {
     try {
-      final response = await _supabase
-          .from('groups')
-          .select('''
-        *,
-        group_members!inner(*)
-      ''')
-          .eq('group_members.user_id', userId);
+      // First get the IDs of groups the user is a member of
+      final groupsResponse = await _supabase
+          .from('group_members')
+          .select('group_id')
+          .eq('user_id', userId);
 
-      if (response == null) {
+      print('DEBUG: Raw group_members response: $groupsResponse');
+
+      if (groupsResponse == null || groupsResponse.isEmpty) {
         print('No groups found for user: $userId');
         return [];
       }
 
-      print('Raw groups response: $response'); // Debug print
+      final groupIds = (groupsResponse as List).map((g) => g['group_id']).toList();
+      print('DEBUG: Found group IDs: $groupIds');
+
+      // Then get full details of those groups including ALL members
+      final response = await _supabase
+          .from('groups')
+          .select('''
+            *,
+            group_members (
+              id,
+              user_id,
+              created_at
+            )
+          ''')
+          .inFilter('id', groupIds);
+
+      print('DEBUG: Raw groups response: $response');
+
+      // Now fetch profiles for all members
+      if (response != null && response is List && response.isNotEmpty) {
+        for (var group in response) {
+          if (group['group_members'] != null) {
+            for (var member in group['group_members']) {
+              final profileResponse = await _supabase
+                  .from('user_profiles')
+                  .select()
+                  .eq('user_id', member['user_id'])
+                  .single();
+              
+              if (profileResponse != null) {
+                member['user_profiles'] = profileResponse;
+              }
+            }
+          }
+        }
+      }
 
       return (response as List)
           .map((group) => Group.fromJson(group))

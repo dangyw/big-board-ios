@@ -20,12 +20,20 @@ class GameMatchup extends StatelessWidget {
     required VoidCallback onPress,
     bool centered = false,
   }) {
+    print('Building betting option:');  // Debug print
+    print('label: $label');            // Debug print
+    print('odds: $odds');              // Debug print
+    print('isSelected: $isSelected');  // Debug print
+    
     final formattedLabel = label.isNotEmpty 
         ? (double.parse(label) > 0 ? '+$label' : label)
         : label;
 
     return GestureDetector(
-      onTap: onPress,
+      onTap: () {
+        print('Betting option tapped');  // Debug print
+        onPress();
+      },
       child: Container(
         width: 100,
         height: 56,
@@ -163,7 +171,7 @@ class GameMatchup extends StatelessWidget {
                           )
                           .price),
                       isSelected: selectedPicks.contains('${game.id}-spread-away'),
-                      onPress: () => togglePick(game.id, 'spread', 'away'),
+                      onPress: () => togglePick(game.id, 'away', 'spread'),
                     ),
                   ),
                 ),
@@ -178,7 +186,7 @@ class GameMatchup extends StatelessWidget {
                           )
                           .price),
                       isSelected: selectedPicks.contains('${game.id}-moneyline-away'),
-                      onPress: () => togglePick(game.id, 'moneyline', 'away'),
+                      onPress: () => togglePick(game.id, 'away', 'moneyline'),
                       centered: true,
                     ),
                   ),
@@ -217,7 +225,7 @@ class GameMatchup extends StatelessWidget {
                           )
                           .price),
                       isSelected: selectedPicks.contains('${game.id}-spread-home'),
-                      onPress: () => togglePick(game.id, 'spread', 'home'),
+                      onPress: () => togglePick(game.id, 'home', 'spread'),
                     ),
                   ),
                 ),
@@ -232,7 +240,7 @@ class GameMatchup extends StatelessWidget {
                           )
                           .price),
                       isSelected: selectedPicks.contains('${game.id}-moneyline-home'),
-                      onPress: () => togglePick(game.id, 'moneyline', 'home'),
+                      onPress: () => togglePick(game.id, 'home', 'moneyline'),
                       centered: true,
                     ),
                   ),

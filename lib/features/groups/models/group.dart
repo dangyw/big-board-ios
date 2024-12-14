@@ -1,3 +1,5 @@
+import 'package:big_board/features/profile/models/user_profile.dart';
+
 class Group {
   final String id;
   final String name;
@@ -46,6 +48,11 @@ class Group {
   }
 
   List<String> get memberIds => members.map((m) => m.userId).toList();
+
+  @override
+  String toString() {
+    return 'Group(name: $name, id: $id, memberCount: ${members.length})';
+  }
 }
 
 class GroupMember {
@@ -53,18 +60,25 @@ class GroupMember {
   final String groupId;
   final String userId;
   final DateTime createdAt;
+  final UserProfile? profile;
 
   GroupMember({
     required this.id,
     required this.groupId,
     required this.userId,
     required this.createdAt,
+    this.profile,
   });
 
   factory GroupMember.fromJson(Map<String, dynamic> json) => GroupMember(
     id: json['id'],
-    groupId: json['group_id'],
+    groupId: json['group_id'] ?? '',
     userId: json['user_id'],
     createdAt: DateTime.parse(json['created_at']),
+    profile: json['user_profiles'] != null
+        ? UserProfile.fromJson(json['user_profiles'])
+        : null,
   );
+
+  String get name => profile?.displayName ?? 'Unknown User';
 } 

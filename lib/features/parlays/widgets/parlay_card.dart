@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../state/parlay_state.dart';
+import '../../groups/models/group.dart';
+import '../../services/parlay_service.dart';
+import 'package:big_board/features/parlays/models/saved_parlay.dart';
 import '../models/game.dart';
-import 'package:big_board/core/utils/odds_calculator.dart';
-import 'package:big_board/features/groups/models/group.dart';
+import '../../profile/models/user_profile.dart';
 
 class ParlayCard extends StatefulWidget {
-  final Set<String> selectedPicks;
-  final List<Game> games;
-  final Function({String? groupId}) onSave;
-  final Function(String) onRemovePick;
+  final ParlayState parlayState;
   final List<Group> userGroups;
+  final VoidCallback onSave;
+  final Map<String, String> memberNames;
+  final Map<String, String> memberPhotos;
+  final UserProfile userProfile;
 
   const ParlayCard({
     Key? key,
-    required this.selectedPicks,
-    required this.games,
+    required this.parlayState,
+    required this.userGroups,
     required this.onSave,
-    required this.onRemovePick,
-    this.userGroups = const [],
+    required this.memberNames,
+    required this.memberPhotos,
+    required this.userProfile,
   }) : super(key: key);
 
   @override
@@ -24,39 +30,289 @@ class ParlayCard extends StatefulWidget {
 }
 
 class _ParlayCardState extends State<ParlayCard> {
-  bool isGroupParlay = false;
-  String? selectedGroupId;
-  final TextEditingController _amountController = TextEditingController();
+  late TextEditingController _unitsController;
 
-  int _getParlayOdds() {
-    final List<int> odds = widget.selectedPicks.map((pickId) {
-      final parts = pickId.split('-');
-      final gameId = parts[0];
-      final betType = parts[1];
-      final team = parts[2];
-      
-      final game = widget.games.firstWhere((g) => g.id == gameId);
-      final bookmaker = game.bookmakers.firstWhere(
-        (b) => b.key == 'fanduel',
-        orElse: () => game.bookmakers.first,
-      );
-      
-      final market = bookmaker.markets.firstWhere(
-        (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
-      );
-      
-      final outcome = market.outcomes.firstWhere(
-        (o) => o.name == (team == 'home' ? game.homeTeam : game.awayTeam),
-      );
-      
-      return outcome.price;
-    }).toList();
-    
-    return OddsCalculator.calculateParlayOdds(odds);
+  @override
+  void initState() {
+    super.initState();
+    _unitsController = TextEditingController(text: widget.parlayState.units.toString());
   }
 
-  String _getSpreadValue(String gameId, String team) {
-    final game = widget.games.firstWhere((g) => g.id == gameId);
+  @override
+  void dispose() {
+    _unitsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalOdds = widget.parlayState.calculateTotalOdds();
+    
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Consumer<ParlayState>(
+              builder: (context, parlayState, child) {
+                return SingleChildScrollView(
+                  controller: scrollController,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Drag Handle
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+
+                      // Group Toggle
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: SwitchListTile(
+                          title: Text('Group Parlay Mode'),
+                          value: parlayState.isGroupMode,
+                          onChanged: (value) => parlayState.setGroupMode(value),
+                        ),
+                      ),
+                      Divider(),
+
+                      // Group Dropdown (when in group mode)
+                      if (parlayState.isGroupMode) ...[
+                        Padding(
+                          padding: EdgeInsets.all(16),
+                          child: DropdownButtonFormField<String>(
+                            decoration: InputDecoration(
+                              labelText: 'Select Group',
+                              border: OutlineInputBorder(),
+                            ),
+                            value: parlayState.selectedGroupId,
+                            items: widget.userGroups.map((group) => DropdownMenuItem(
+                              value: group.id,
+                              child: Text(group.name),
+                            )).toList(),
+                            onChanged: (value) => parlayState.setSelectedGroup(value),
+                          ),
+                        ),
+                        Divider(),
+                      ],
+
+                      // Parlay Summary
+                      Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${parlayState.selectedPicks.length} Team Parlay',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              'Total Odds: ${totalOdds >= 0 ? "+$totalOdds" : totalOdds}',
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Units Input
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  labelText: 'Units',
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                controller: _unitsController,
+                                onChanged: (value) {
+                                  final units = double.tryParse(value);
+                                  if (units != null) widget.parlayState.setUnits(units);
+                                },
+                              ),
+                            ),
+                            SizedBox(width: 16),
+                            Text(
+                              'Return: ${(widget.parlayState.units * (totalOdds/100)).toStringAsFixed(1)} Units',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Selected Picks
+                      Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: parlayState.selectedPicks.map((pickId) {
+                            final details = parlayState.getGameDetails(pickId);
+                            final betType = pickId.split('-')[1];
+                            final odds = parlayState.getFormattedOdds(pickId);
+                            print('Pick ID: $pickId');
+                            print('Bet Type: $betType');
+                            print('Formatted Odds: ${parlayState.getFormattedOdds(pickId)}');
+                            print('Game Details: ${details}');
+                            print('Raw Game: ${parlayState.getGameById(pickId.split('-')[0])}');
+                            
+                            return Card(
+                              margin: EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.grey[200],
+                                  child: Icon(Icons.sports_football, color: Colors.indigo),
+                                ),
+                                title: Text(details['team'] ?? ''),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${betType[0].toUpperCase()}${betType.substring(1)} vs ${details['opponent']}'),
+                                    if (betType == 'spread') ...[
+                                      Text(
+                                        getSpreadDisplay(pickId),
+                                        style: TextStyle(color: Colors.blue),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 15,
+                                      backgroundColor: Colors.grey[200],
+                                      backgroundImage: widget.userProfile.photoURL != null 
+                                          ? NetworkImage(widget.userProfile.photoURL!)
+                                          : null,
+                                      child: widget.userProfile.photoURL == null 
+                                          ? Icon(Icons.person_outline, size: 20, color: Colors.indigo)
+                                          : null,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text(betType == 'spread' 
+                                        ? details['details']?.toString().split(' ').last ?? ''
+                                        : getMoneylineOdds(pickId)),
+                                    IconButton(
+                                      icon: Icon(Icons.close),
+                                      onPressed: () => parlayState.removePick(pickId),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+
+                      // Group Mode Placeholder Picks
+                      if (parlayState.isGroupMode) ...[
+                        Divider(),
+                        Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Group Picks',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              ...parlayState.placeholderPicks.map((pick) => Card(
+                                margin: EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.grey[200],
+                                    backgroundImage: pick.assignedUserId != null && widget.memberPhotos[pick.assignedUserId] != null
+                                        ? NetworkImage(widget.memberPhotos[pick.assignedUserId]!)
+                                        : null,
+                                    child: (pick.assignedUserId == null || widget.memberPhotos[pick.assignedUserId] == null)
+                                        ? Icon(Icons.person_outline, color: Colors.indigo)
+                                        : null,
+                                  ),
+                                  title: Text('Group Pick'),
+                                  subtitle: Text('Assign to group member'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      DropdownButton<String>(
+                                        hint: Text('Select User'),
+                                        value: pick.assignedUserId,
+                                        items: widget.userGroups
+                                            .expand((group) => group.members)
+                                            .map((member) => DropdownMenuItem(
+                                                  value: member.id,
+                                                  child: Text(member.name),
+                                                ))
+                                            .toList(),
+                                        onChanged: (value) =>
+                                            parlayState.assignUserToPlaceholder(pick.id, value),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.close),
+                                        onPressed: () => parlayState.removePlaceholderPick(pick.id),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )).toList(),
+                              TextButton.icon(
+                                icon: Icon(Icons.add),
+                                label: Text('Add Group Pick'),
+                                onPressed: () => parlayState.addPlaceholderPick(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // Save Button
+                      Padding(
+                        padding: EdgeInsets.all(16),
+                        child: ElevatedButton(
+                          onPressed: widget.onSave,
+                          child: Text('Save Parlay'),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: Size(double.infinity, 48),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String getSpreadDisplay(String pickId) {
+    final parts = pickId.split('-');
+    final gameId = parts[0];
+    final team = parts[2];
+    final game = widget.parlayState.getGameById(gameId);
+    
+    if (game == null) return "0";
+    
     final bookmaker = game.bookmakers.firstWhere(
       (b) => b.key == 'fanduel',
       orElse: () => game.bookmakers.first,
@@ -64,241 +320,53 @@ class _ParlayCardState extends State<ParlayCard> {
     
     final spreads = bookmaker.markets.firstWhere(
       (m) => m.key == 'spreads',
+      orElse: () => Market(key: 'spreads', lastUpdate: DateTime.now(), outcomes: []),
     );
+    
+    final actualTeam = team == 'home' ? game.homeTeam : game.awayTeam;
     
     final outcome = spreads.outcomes.firstWhere(
-      (o) => o.name == (team == 'home' ? game.homeTeam : game.awayTeam),
+      (o) => o.name == actualTeam,
+      orElse: () => Outcome(name: '', price: -110, point: 0),
     );
     
-    return outcome.point! > 0 ? '+${outcome.point}' : '${outcome.point}';
+    final point = outcome.point ?? 0;
+    return point >= 0 ? '+$point' : point.toString();
   }
 
-  String _getOddsValue(String gameId, String betType, String team) {
-    final game = widget.games.firstWhere((g) => g.id == gameId);
+  String formatOdds(int odds) {
+    if (odds >= 0) {
+      return '+$odds';
+    }
+    return odds.toString();
+  }
+
+  String getMoneylineOdds(String pickId) {
+    final parts = pickId.split('-');
+    final gameId = parts[0];
+    final team = parts[2];
+    final game = widget.parlayState.getGameById(gameId);
+    
+    if (game == null) return "0";
+    
     final bookmaker = game.bookmakers.firstWhere(
       (b) => b.key == 'fanduel',
       orElse: () => game.bookmakers.first,
     );
     
-    final market = bookmaker.markets.firstWhere(
-      (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
+    final moneyline = bookmaker.markets.firstWhere(
+      (m) => m.key == 'h2h',
+      orElse: () => Market(key: 'h2h', lastUpdate: DateTime.now(), outcomes: []),
     );
     
-    final outcome = market.outcomes.firstWhere(
-      (o) => o.name == (team == 'home' ? game.homeTeam : game.awayTeam),
+    final actualTeam = team == 'home' ? game.homeTeam : game.awayTeam;
+    
+    final outcome = moneyline.outcomes.firstWhere(
+      (o) => o.name == actualTeam,
+      orElse: () => Outcome(name: '', price: 0, point: 0),
     );
     
-    return outcome.price > 0 ? '+${outcome.price}' : '${outcome.price}';
-  }
-
-  String _getOpponent(Game game, String team) {
-    return 'vs ${team == 'home' ? game.awayTeam : game.homeTeam}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.selectedPicks.isEmpty) return SizedBox.shrink();
-
-    final parlayOdds = _getParlayOdds();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          Container(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            width: double.infinity,
-            child: Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-          
-          // Header with Title and Odds
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Parlay (${widget.selectedPicks.length} picks)',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Odds: ${OddsCalculator.formatOdds(parlayOdds)}',
-                  style: TextStyle(
-                    fontSize: 20,
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // List of Picks
-          Container(
-            constraints: BoxConstraints(maxHeight: 300),
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              itemCount: widget.selectedPicks.length,
-              separatorBuilder: (context, index) => Divider(
-                height: 24,
-                color: Colors.grey[200],
-              ),
-              itemBuilder: (context, index) {
-                final pickId = widget.selectedPicks.elementAt(index);
-                final parts = pickId.split('-');
-                final gameId = parts[0];
-                final betType = parts[1];
-                final team = parts[2];
-                
-                final game = widget.games.firstWhere((g) => g.id == gameId);
-                final teamName = team == 'home' ? game.homeTeam : game.awayTeam;
-                
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            teamName,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                betType == 'spread' ? 'Spread' : 'Moneyline',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                betType == 'spread' 
-                                  ? '${_getSpreadValue(gameId, team)} (${_getOddsValue(gameId, betType, team)})' 
-                                  : _getOddsValue(gameId, betType, team),
-                                style: TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                _getOpponent(game, team),
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.close, color: Colors.red),
-                      onPressed: () => widget.onRemovePick(pickId),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          // Save Button
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: isGroupParlay && selectedGroupId == null 
-                  ? null
-                  : () => widget.onSave(
-                      groupId: isGroupParlay ? selectedGroupId : null,
-                    ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFE6D4F3),
-                  foregroundColor: Colors.purple[900],
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  'Save Parlay',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Group Toggle section
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Personal',
-                  style: TextStyle(
-                    color: !isGroupParlay ? Colors.purple[900] : Colors.grey[600],
-                    fontWeight: !isGroupParlay ? FontWeight.w600 : FontWeight.normal,
-                    fontSize: 16,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Switch(
-                  value: isGroupParlay,
-                  activeColor: Colors.purple[900],
-                  onChanged: (value) {
-                    setState(() {
-                      isGroupParlay = value;
-                      if (!value) selectedGroupId = null;
-                    });
-                  },
-                ),
-                SizedBox(width: 12),
-                Text(
-                  'Group',
-                  style: TextStyle(
-                    color: isGroupParlay ? Colors.purple[900] : Colors.grey[600],
-                    fontWeight: isGroupParlay ? FontWeight.w600 : FontWeight.normal,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return outcome.price >= 0 ? '+${outcome.price}' : '${outcome.price}';
   }
 }
+

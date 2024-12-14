@@ -9,6 +9,57 @@ class ParlayService {
   final _supabase = Supabase.instance.client;
   final _streamController = StreamController<List<SavedParlay>>.broadcast();
 
+  Stream<List<SavedParlay>> getParlays({String? groupId}) async* {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      if (groupId != null) {
+        final data = await _supabase
+            .from('parlays')
+            .select()
+            .eq('group_id', groupId)
+            .order('created_at', ascending: false);
+        yield data.map((json) => SavedParlay.fromJson(json)).toList();
+      } else {
+        final data = await _supabase
+            .from('parlays')
+            .select()
+            .eq('user_id', user.id)
+            .order('created_at', ascending: false);
+        yield data.map((json) => SavedParlay.fromJson(json)).toList();
+      }
+
+      // Set up real-time subscription
+      await _initParlayStream(groupId);
+
+    } catch (e) {
+      print('Error in getParlays: $e');
+      yield [];
+    }
+  }
+
+  Future<void> _refreshParlays({String? groupId}) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final query = _supabase.from('parlays').select();
+      
+      if (groupId != null) {
+        query.eq('group_id', groupId);
+      } else {
+        query.eq('user_id', user.id);
+      }
+      
+      final data = await query.order('created_at', ascending: false);
+      final parlays = data.map((json) => SavedParlay.fromJson(json)).toList();
+      _streamController.add(parlays);
+    } catch (e) {
+      print('Error refreshing parlays: $e');
+    }
+  }
+
   Future<void> saveParlay(SavedParlay parlay) async {
     try {
       final user = _supabase.auth.currentUser;
@@ -23,31 +74,6 @@ class ParlayService {
     } catch (e) {
       print('Error saving parlay: $e');
       rethrow;
-    }
-  }
-
-  Stream<List<SavedParlay>> getParlays({String? groupId}) {
-    if (groupId != null) {
-      return getGroupParlays(groupId);
-    }
-    return _streamController.stream;
-  }
-
-  Future<void> _refreshParlays() async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
-
-      final data = await _supabase
-          .from('parlays')
-          .select()
-          .eq('user_id', user.id)
-          .order('created_at', ascending: false);
-
-      final parlays = data.map((json) => SavedParlay.fromJson(json)).toList();
-      _streamController.add(parlays);
-    } catch (e) {
-      print('Error refreshing parlays: $e');
     }
   }
 
@@ -182,7 +208,7 @@ class ParlayService {
     for (var pick in picks) {
       await _supabase.from('parlay_picks').insert({
         'parlay_id': parlayId,
-        'assigned_member_id': pick.assignedMemberId,
+        'assigned_member_id': pick.assignedUserId,
         'status': 'pending',
       });
     }
@@ -200,5 +226,41 @@ class ParlayService {
         })
         .eq('parlay_id', parlayId)
         .eq('assigned_member_id', memberId);
+  }
+
+  Future<void> _initParlayStream(String? groupId) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        _streamController.add([]);
+        return;
+      }
+
+      final channel = _supabase.channel('public:parlays');
+      
+      await channel.subscribe((status, [context]) {
+        if (status == 'SUBSCRIBED') {
+          // Initial subscription successful
+          return;
+        }
+
+        if (context == null) return;
+
+        final payload = context as Map<String, dynamic>;
+        if (!payload.containsKey('new')) return;
+
+        final newRecord = payload['new'] as Map<String, dynamic>;
+        final recordGroupId = newRecord['group_id'] as String?;
+        final recordUserId = newRecord['user_id'] as String?;
+
+        if ((groupId != null && recordGroupId == groupId) ||
+            (groupId == null && recordUserId == user.id)) {
+          _refreshParlays(groupId: groupId);
+        }
+      });
+
+    } catch (e) {
+      print('Error in _initParlayStream: $e');
+    }
   }
 } 

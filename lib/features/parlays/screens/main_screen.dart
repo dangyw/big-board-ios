@@ -21,6 +21,11 @@ import 'package:big_board/features/parlays/widgets/parlay_details_sheet.dart';
 import 'package:big_board/features/profile/services/user_profile_service.dart';
 import 'package:big_board/features/parlays/models/parlay_invitation.dart';
 import 'package:big_board/features/auth/services/auth_service.dart';
+import 'package:big_board/features/parlays/models/placeholder_pick.dart';
+import 'package:big_board/features/parlays/widgets/group_member_assignments.dart';
+import 'package:provider/provider.dart';
+import '../state/parlay_state.dart';
+import 'package:uuid/uuid.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -32,27 +37,54 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   final AuthService _authService = AuthService();
   User? get currentUser => Supabase.instance.client.auth.currentUser;
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   final ParlayService _parlayService = ParlayService();
   final UserProfileService _userProfileService = UserProfileService();
   List<Game> games = [];
+  final Map<String, String> memberNames = {};
+  final Map<String, String> memberPhotos = {};
   String searchQuery = '';
-  bool isLoading = false;
-  Set<String> selectedPicks = {};
+  bool isLoading = false; 
   late UserProfile userProfile;
   List<Group> userGroups = [];
   final GroupsService _groupsService = GroupsService();
+  bool _isProcessingToggle = false;
+  late final ParlayState _parlayState;
 
   @override
   void initState() {
     super.initState();
-    _loadMockData();
-    _loadUserGroups();
-    _initializeUserProfile();
-    
-    // Only subscribe if user is already signed in
+    _scrollController = ScrollController();
+    _parlayState = Provider.of<ParlayState>(context, listen: false);
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      // Load games, groups, and user profile in parallel
+      await Future.wait([
+        _loadMockData(),
+        _loadUserGroups(),
+        _initializeUserProfile(),
+      ]);
+    } catch (e) {
+      print('Error loading initial data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadUserGroups() async {
     if (currentUser != null) {
-      _subscribeToInvitations();
+      final groups = await _groupsService.getUserGroups(currentUser!.id);
+      if (mounted) {
+        setState(() {
+          userGroups = groups;
+        });
+      }
     }
   }
 
@@ -113,15 +145,16 @@ class _MainScreenState extends State<MainScreen> {
     if (user != null) {
       try {
         final profile = await _userProfileService.getProfile(user.id);
-        print("Debug - Profile loaded: $profile"); // Debug line
-        print("Debug - Photo URL: ${profile?.photoURL}"); // Debug line
-        if (profile != null) {
+        if (profile != null && mounted) {
           setState(() {
             userProfile = profile;
           });
+        } else {
+          throw Exception('Could not load user profile');
         }
       } catch (e) {
         print("Error loading user profile: $e");
+        rethrow; // Propagate error to be caught by _loadInitialData
       }
     }
   }
@@ -137,85 +170,50 @@ class _MainScreenState extends State<MainScreen> {
       games = loadedGames;
       isLoading = false;
     });
-  }
 
-  Future<void> _loadUserGroups() async {
-    try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      print('Loading groups for user: $userId'); // Debug print
-      
-      if (userId == null) return;
-      
-      final groups = await _groupsService.getUserGroups(userId);
-      print('Loaded groups: ${groups.length}'); // Debug print
-      print('Group details: $groups'); // Debug print
-      
-      setState(() {
-        userGroups = groups;
-      });
-    } catch (e) {
-      print('Error loading groups: $e');
-    }
+    // Update ParlayState with the loaded games
+    _parlayState.updateGames(loadedGames);
   }
 
   void togglePick(String gameId, String team, String betType) {
-    final pickId = '$gameId-$team-$betType';
+    print('togglePick called with:');  // Debug print
+    print('gameId: $gameId');          // Debug print
+    print('team: $team');              // Debug print
+    print('betType: $betType');        // Debug print
     
     setState(() {
-      if (selectedPicks.contains(pickId)) {
-        selectedPicks.remove(pickId);
-      } else {
-        // Remove any existing picks for this game before adding the new one
-        selectedPicks.removeWhere((pick) => pick.startsWith('$gameId-'));
-        selectedPicks.add(pickId);
-      }
+      _parlayState.togglePick(gameId, team, betType);
+      print('After toggle, selectedPicks: ${_parlayState.selectedPicks}');  // Debug print
     });
   }
 
   void removePick(String pickId) {
-    setState(() {
-      selectedPicks.remove(pickId);
-    });
-    
-    // If no picks left, close the bottom sheet
-    if (selectedPicks.isEmpty && Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
+    _parlayState.removePick(pickId);
   }
 
   Future<void> _saveParlay(String? groupId, List<PlaceholderPick> placeholderPicks) async {
-    try {
-      if (groupId != null) {
-        // Convert placeholder picks to a more structured format
-        final memberPicks = <String, List<String>>{};
-        for (final pick in placeholderPicks) {
-          if (pick.assignedMemberId != null) {
-            memberPicks.putIfAbsent(pick.assignedMemberId!, () => []).add('placeholder');
-          }
-        }
+    final savedParlay = SavedParlay(
+      id: const Uuid().v4(),
+      userId: currentUser?.id ?? '',
+      groupId: groupId,
+      picks: _convertPicksToSavedPicks(_parlayState.selectedPicks).toList(),
+      totalOdds: _calculateTotalOdds(),
+      units: 10.0,
+      createdAt: DateTime.now(),
+    );
 
-        final parlay = {
-          'creator_id': userProfile.id,
-          'group_id': groupId,
-          'status': 'pending',
-          'my_picks': selectedPicks,
-          'member_picks': memberPicks,
-          'created_at': DateTime.now().toIso8601String(),
-        };
-        
-        print('Saving group parlay: $parlay');
-        
-        // Notify members they need to add picks
-        for (final memberId in memberPicks.keys) {
-          final numPicks = memberPicks[memberId]?.length ?? 0;
-          print('Notifying $memberId to add $numPicks picks');
-        }
-      } else {
-        // Save as individual parlay
-        print('Saving individual parlay');
+    try {
+      await _parlayService.saveParlay(savedParlay);
+      if (mounted) {
+        Navigator.pop(context);
       }
     } catch (e) {
       print('Error saving parlay: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save parlay: $e')),
+        );
+      }
     }
   }
 
@@ -254,244 +252,25 @@ class _MainScreenState extends State<MainScreen> {
     }).toList();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Big Board'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.group),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => GroupsScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.history),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => SavedParlaysScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(
-                    userProfile: userProfile,
-                  ),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () async {
-              try {
-                await Supabase.instance.client.auth.signOut();
-                if (mounted) {
-                  // Navigate to SignInScreen and remove all previous routes
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => SignInScreen()),
-                    (route) => false,  // This removes all previous routes
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error signing out')),
-                  );
-                }
-              }
-            },
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // Search Bar
-              Padding(
-                padding: EdgeInsets.all(16),
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search teams...',
-                    prefixIcon: Icon(Icons.search),
-                    suffixIcon: searchQuery.isNotEmpty 
-                      ? IconButton(
-                          icon: Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() {
-                              searchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      searchQuery = value;
-                    });
-                  },
-                  textInputAction: TextInputAction.search,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                ),
-              ),
-
-              // Games List
-              Expanded(
-                child: isLoading 
-                  ? Center(child: CircularProgressIndicator())
-                  : games.isEmpty 
-                    ? Center(child: Text('No games available'))
-                    : RefreshIndicator(
-                        onRefresh: _loadMockData,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: EdgeInsets.fromLTRB(16, 0, 16, 100),
-                          itemCount: filteredGames.length,
-                          itemBuilder: (context, index) {
-                            final game = filteredGames[index];
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: 16),
-                              child: Column(
-                                children: [
-                                  ListTile(
-                                    title: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                                          child: Text(
-                                            _formatTime(game.commenceTime),
-                                            style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ),
-                                        GameMatchup(
-                                          game: game,
-                                          selectedPicks: selectedPicks,
-                                          togglePick: togglePick,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      bottomNavigationBar: selectedPicks.isNotEmpty
-        ? ParlaySummaryBar(
-            numPicks: selectedPicks.length,
-            odds: _calculateTotalOdds(),
-            onTap: _showParlayDetails,
-          )
-        : null,
-    );
-  }
-
-  void _showParlayDetails() async {
-    try {
-      // Only get members from the user's active groups
-      final Set<String> memberIds = userGroups
-          .expand((group) => group.memberIds)
-          .where((id) => id != currentUser?.id)  // Optionally exclude current user
-          .toSet();
-      
-      if (memberIds.isEmpty) {
-        // If no group members, show the sheet with empty maps
-        _showParlayDetailsSheet({}, {});
-        return;
-      }
-
-      // Fetch profiles in parallel, but only for group members
-      final profiles = await Future.wait(
-        memberIds.map((id) => _userProfileService.getProfile(id))
-      );
-      
-      // Build the maps only for valid profiles
-      final Map<String, String> memberNames = {};
-      final Map<String, String> memberPhotos = {};
-      
-      for (final profile in profiles) {
-        if (profile != null) {
-          memberNames[profile.id] = profile.username ?? 'Unknown User';
-          memberPhotos[profile.id] = profile.photoURL ?? '';
-        }
-      }
-
-      if (!mounted) return;
-      _showParlayDetailsSheet(memberNames, memberPhotos);
-
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading member profiles: $e')),
-      );
-    }
-  }
-
-  // Separated the sheet display logic for cleaner code
-  void _showParlayDetailsSheet(
-    Map<String, String> memberNames,
-    Map<String, String> memberPhotos,
-  ) {
-    // Add current user's info to the maps if not already present
-    if (currentUser != null) {
-      memberNames.putIfAbsent(currentUser!.id, () => userProfile.username ?? 'Me');
-      memberPhotos.putIfAbsent(currentUser!.id, () => userProfile.photoURL ?? '');
-    }
-
+  void _showParlayDetails() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      enableDrag: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => ParlayDetailsSheet(
-          games: games,
-          selectedPicks: selectedPicks.toList(),
-          onRemovePick: (pickId) => togglePick(
-            pickId.split('-')[0],
-            pickId.split('-')[1],
-            pickId.split('-')[2],
-          ),
-          onSave: _saveParlay,
-          userGroups: userGroups,
-          memberNames: memberNames,
-          memberPhotos: memberPhotos,
-        ),
+      builder: (context) => ParlayCard(
+        parlayState: _parlayState,
+        userGroups: userGroups,
+        onSave: () => _saveParlay(null, []),
+        memberNames: memberNames,
+        memberPhotos: memberPhotos,
+        userProfile: userProfile,
       ),
     );
   }
 
   int _calculateTotalOdds() {
-    final List<int> odds = selectedPicks.map((pickId) {
+    final List<int> odds = _parlayState.selectedPicks.map((pickId) {
       final parts = pickId.split('-');
       final gameId = parts[0];
       final betType = parts[1];
@@ -522,6 +301,206 @@ class _MainScreenState extends State<MainScreen> {
     // Store member assignments for each pick
     // For unassigned picks (not in assignments map), these will be available 
     // for group members to claim
+  }
+
+  List<SavedPick> _convertPicksToSavedPicks(Set<String> picks) {
+    return picks.map((pickId) {
+      final parts = pickId.split('-');
+      final gameId = parts[0];
+      final betType = parts[1];
+      final team = parts[2];
+      
+      final game = games.firstWhere((g) => g.id == gameId);
+      final bookmaker = game.bookmakers.firstWhere(
+        (b) => b.key == 'fanduel',
+        orElse: () => game.bookmakers.first,
+      );
+      
+      final market = bookmaker.markets.firstWhere(
+        (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
+      );
+      
+      final outcome = market.outcomes.firstWhere(
+        (o) => o.name == (team == 'home' ? game.homeTeam : game.awayTeam),
+      );
+
+      return SavedPick(
+        teamName: team == 'home' ? game.homeTeam : game.awayTeam,
+        opponent: team == 'home' ? game.awayTeam : game.homeTeam,
+        betType: betType,
+        spreadValue: betType == 'spread' ? outcome.point : null,
+        odds: outcome.price,
+      );
+    }).toList();
+  }
+
+  void _removePick(String pickId) {
+    setState(() {
+      _parlayState.selectedPicks.remove(pickId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ParlayState>(
+      builder: (context, parlayState, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Big Board'),
+            actions: [
+              IconButton(
+                icon: Icon(Icons.group),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => GroupsScreen()),
+                  );
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.history),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => SavedParlaysScreen()),
+                  );
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.settings),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProfileScreen(
+                        userProfile: userProfile,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.logout),
+                onPressed: () async {
+                  try {
+                    await Supabase.instance.client.auth.signOut();
+                    if (mounted) {
+                      // Navigate to SignInScreen and remove all previous routes
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (context) => SignInScreen()),
+                        (route) => false,  // This removes all previous routes
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error signing out')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+          body: Stack(
+            children: [
+              Column(
+                children: [
+                  // Search Bar
+                  Padding(
+                    padding: EdgeInsets.all(16),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search teams...',
+                        prefixIcon: Icon(Icons.search),
+                        suffixIcon: searchQuery.isNotEmpty 
+                          ? IconButton(
+                              icon: Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() {
+                                  searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          searchQuery = value;
+                        });
+                      },
+                      textInputAction: TextInputAction.search,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                    ),
+                  ),
+
+                  // Games List
+                  Expanded(
+                    child: isLoading 
+                      ? Center(child: CircularProgressIndicator())
+                      : games.isEmpty 
+                        ? Center(child: Text('No games available'))
+                        : RefreshIndicator(
+                            onRefresh: _loadMockData,
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              padding: EdgeInsets.fromLTRB(16, 0, 16, 100),
+                              itemCount: filteredGames.length,
+                              itemBuilder: (context, index) {
+                                final game = filteredGames[index];
+                                return Padding(
+                                  padding: EdgeInsets.only(bottom: 16),
+                                  child: Column(
+                                    children: [
+                                      ListTile(
+                                        title: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Padding(
+                                              padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                                              child: Text(
+                                                _formatTime(game.commenceTime),
+                                                style: TextStyle(
+                                                  color: Colors.grey[600],
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ),
+                                            GameMatchup(
+                                              game: game,
+                                              selectedPicks: context.watch<ParlayState>().selectedPicks,
+                                              togglePick: togglePick,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          bottomNavigationBar: parlayState.selectedPicks.isNotEmpty
+            ? ParlaySummaryBar(
+                numPicks: parlayState.selectedPicks.length,
+                odds: _calculateTotalOdds(),
+                onTap: _showParlayDetails,
+              )
+            : null,
+        );
+      }
+    );
   }
 
   @override
