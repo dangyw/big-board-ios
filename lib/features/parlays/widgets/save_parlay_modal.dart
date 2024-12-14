@@ -35,12 +35,12 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
         return;
       }
 
-      final amount = double.tryParse(value) ?? 0;
+      final units = double.tryParse(value) ?? 0;
       final decimal = widget.totalOdds > 0 
           ? (widget.totalOdds / 100) + 1
           : 1 - (100 / widget.totalOdds);
       
-      _potentialPayout = amount * decimal;
+      _potentialPayout = units * decimal;
     });
   }
 
@@ -153,14 +153,14 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
                 SizedBox(width: 16),
                 ElevatedButton(
                   onPressed: () {
-                    final amount = double.tryParse(_amountController.text) ?? 0;
-                    if (amount <= 0) {
+                    final units = double.tryParse(_amountController.text) ?? 0;
+                    if (units <= 0) {
                       setState(() {
                         _errorMessage = 'Please enter a valid amount';
                       });
                       return;
                     }
-                    widget.onSave(amount, _selectedGroupId);
+                    widget.onSave(units, _selectedGroupId);
                     Navigator.pop(context);
                   },
                   child: Text('Save Parlay'),

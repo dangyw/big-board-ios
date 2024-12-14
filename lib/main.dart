@@ -9,6 +9,7 @@ import 'package:big_board/features/profile/services/user_profile_service.dart';
 import 'package:big_board/features/profile/services/user_profile_provider.dart';
 import 'package:big_board/features/profile/screens/create_profile_screen.dart';
 import 'package:big_board/features/parlays/screens/main_screen.dart';
+import 'features/parlays/state/parlay_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +19,11 @@ void main() async {
     anonKey: SupabaseConfig.anonKey,
   );
   
-  runApp(const MyApp());
+  runApp(
+    ParlayProvider(
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
