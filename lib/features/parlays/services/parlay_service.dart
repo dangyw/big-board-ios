@@ -68,9 +68,32 @@ class ParlayService {
       final parlayJson = parlay.toJson();
       parlayJson.remove('id');  // Remove the id field and let Supabase generate it
 
-      await _supabase
+      // First save the parlay
+      final response = await _supabase
           .from('parlays')
-          .insert(parlayJson);
+          .insert(parlayJson)
+          .select()
+          .single();
+
+      final parlayId = response['id'];
+
+      // If this is a group parlay with placeholder picks, create the picks
+      if (parlay.groupId != null && parlay.placeholderPicks != null) {
+        for (var pick in parlay.placeholderPicks!) {
+          await _supabase.from('parlay_picks').insert({
+            'parlay_id': parlayId,
+            'assigned_member_id': pick.assignedUserId,
+            'status': 'pending',
+            'team_name': pick.teamName,
+            'opponent': pick.opponent,
+            'bet_type': pick.betType,
+            'spread_value': pick.spreadValue,
+            'odds': pick.odds,
+          });
+        }
+      }
+
+      await _refreshParlays(groupId: parlay.groupId);
     } catch (e) {
       print('Error saving parlay: $e');
       rethrow;
@@ -261,6 +284,30 @@ class ParlayService {
 
     } catch (e) {
       print('Error in _initParlayStream: $e');
+    }
+  }
+
+  Future<void> updatePlaceholderPick(
+    String parlayId, 
+    String memberId, 
+    SavedPick pick
+  ) async {
+    try {
+      await _supabase.from('parlay_picks').update({
+        'team_name': pick.teamName,
+        'opponent': pick.opponent,
+        'bet_type': pick.betType,
+        'spread_value': pick.spreadValue,
+        'odds': pick.odds,
+        'status': 'completed'
+      })
+      .eq('parlay_id', parlayId)
+      .eq('assigned_member_id', memberId);
+
+      await _refreshParlays();
+    } catch (e) {
+      print('Error updating placeholder pick: $e');
+      rethrow;
     }
   }
 } 

@@ -10,7 +10,6 @@ class MockDataLoader {
       final List<dynamic> jsonData = json.decode(jsonString);
       return jsonData.map((json) => Game.fromJson(json)).toList();
     } catch (e) {
-      print('Error loading mock data: $e');
       return [];
     }
   }
