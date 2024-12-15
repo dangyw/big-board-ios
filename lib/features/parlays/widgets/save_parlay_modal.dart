@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/saved_parlay.dart';
-import '../../groups/models/group.dart';
+import 'package:big_board/features/parlays/models/saved_parlay.dart';
+import 'package:big_board/features/groups/models/group.dart';
 
 class SaveParlayModal extends StatefulWidget {
   final List<SavedPick> picks;

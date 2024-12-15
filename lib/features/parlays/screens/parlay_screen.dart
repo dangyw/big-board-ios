@@ -24,17 +24,18 @@ import 'package:big_board/features/auth/services/auth_service.dart';
 import 'package:big_board/features/parlays/models/placeholder_pick.dart';
 import 'package:big_board/features/parlays/widgets/group_member_assignments.dart';
 import 'package:provider/provider.dart';
-import '../state/parlay_state.dart';
+import 'package:big_board/features/parlays/state/parlay_state.dart';
 import 'package:uuid/uuid.dart';
+import 'package:big_board/features/parlays/helpers/pick_helper.dart';
 
-class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+class ParlayScreen extends StatefulWidget {
+  const ParlayScreen({Key? key}) : super(key: key);
 
   @override
-  _MainScreenState createState() => _MainScreenState();
+  _ParlayScreenState createState() => _ParlayScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _ParlayScreenState extends State<ParlayScreen> {
   final AuthService _authService = AuthService();
   User? get currentUser => Supabase.instance.client.auth.currentUser;
   late final ScrollController _scrollController;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/game.dart';
+import 'package:big_board/features/parlays/models/game.dart';
 
 class GameMatchup extends StatelessWidget {
   final Game game;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/game.dart';
-import '../models/placeholder_pick.dart';
+import 'package:big_board/features/parlays/models/game.dart';
+import 'package:big_board/features/parlays/models/placeholder_pick.dart';
 import 'package:big_board/core/utils/odds_calculator.dart';
 import 'package:big_board/features/groups/models/group.dart';
 import 'package:big_board/features/parlays/services/parlay_service.dart';
@@ -11,9 +11,9 @@ import 'package:big_board/features/groups/widgets/create_group_dialog.dart';
 import 'package:flutter/services.dart';
 import './group_member_assignments.dart';
 import 'package:provider/provider.dart';
-import '../state/parlay_state.dart';
+import 'package:big_board/features/parlays/state/parlay_state.dart';
 import 'package:big_board/features/parlays/models/saved_parlay.dart';
-import 'package:big_board/features/groups/models/group.dart';
+import 'package:big_board/features/parlays/helpers/pick_helper.dart';
 
 class ParlayDetailsSheet extends StatelessWidget {
   final bool isGroupParlay;
