@@ -79,13 +79,31 @@ class _ParlayScreenState extends State<ParlayScreen> {
   }
 
   Future<void> _loadUserGroups() async {
+    print('\n=== Starting _loadUserGroups in ParlayScreen ===\n');
     if (currentUser != null) {
+      print('Current User ID: ${currentUser!.id}');
       final groups = await _groupsService.getUserGroups(currentUser!.id);
+      print('Groups returned: $groups');
       if (mounted) {
         setState(() {
           userGroups = groups;
+          
+          memberPhotos.clear();
+          for (var group in groups) {
+            for (var member in group.members) {
+              print('Processing member: ${member.userId}');
+              print('Member Profile: ${member.profile?.toJson()}');
+              if (member.profile?.photoURL != null) {
+                memberPhotos[member.userId] = member.profile!.photoURL!;
+                print('Added photo: ${member.profile!.photoURL}');
+              }
+            }
+          }
+          print('Final memberPhotos map: $memberPhotos');
         });
       }
+    } else {
+      print('No current user found');
     }
   }
 
@@ -177,14 +195,21 @@ class _ParlayScreenState extends State<ParlayScreen> {
   }
 
   void togglePick(String gameId, String team, String betType) {
-    print('togglePick called with:');  // Debug print
-    print('gameId: $gameId');          // Debug print
-    print('team: $team');              // Debug print
-    print('betType: $betType');        // Debug print
+    final pickId = '$gameId-$betType-$team';
+    
+    // Check if there's already a pick from this game
+    final existingPick = _parlayState.selectedPicks.firstWhere(
+      (pick) => pick.split('-')[0] == gameId,
+      orElse: () => '',
+    );
+
+    if (existingPick.isNotEmpty && existingPick != pickId) {
+      // Remove existing pick from this game before adding new one
+      _parlayState.removePick(existingPick);
+    }
     
     setState(() {
       _parlayState.togglePick(gameId, team, betType);
-      print('After toggle, selectedPicks: ${_parlayState.selectedPicks}');  // Debug print
     });
   }
 

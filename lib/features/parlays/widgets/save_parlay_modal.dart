@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:big_board/features/parlays/models/saved_parlay.dart';
 import 'package:big_board/features/groups/models/group.dart';
+import 'package:big_board/core/utils/odds_calculator.dart';
 
 class SaveParlayModal extends StatefulWidget {
   final List<SavedPick> picks;
@@ -36,10 +37,7 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
       }
 
       final units = double.tryParse(value) ?? 0;
-      final decimal = widget.totalOdds > 0 
-          ? (widget.totalOdds / 100) + 1
-          : 1 - (100 / widget.totalOdds);
-      
+      final decimal = OddsCalculator.usToDecimal(widget.totalOdds);
       _potentialPayout = units * decimal;
     });
   }

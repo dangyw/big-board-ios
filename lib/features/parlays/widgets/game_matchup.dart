@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:big_board/features/parlays/models/game.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:big_board/core/services/espn_service.dart';
 
 class GameMatchup extends StatelessWidget {
   final Game game;
@@ -20,10 +22,6 @@ class GameMatchup extends StatelessWidget {
     required VoidCallback onPress,
     bool centered = false,
   }) {
-    print('Building betting option:');  // Debug print
-    print('label: $label');            // Debug print
-    print('odds: $odds');              // Debug print
-    print('isSelected: $isSelected');  // Debug print
     
     final formattedLabel = label.isNotEmpty 
         ? (double.parse(label) > 0 ? '+$label' : label)
@@ -67,6 +65,29 @@ class GameMatchup extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTeamLogo(String teamName) {
+    final url = EspnService.getTeamLogoUrl(teamName);
+    
+    return CachedNetworkImage(
+      imageUrl: url,  // Use the url variable
+      width: 30,
+      height: 30,
+      placeholder: (context, url) => SizedBox(
+        width: 30,
+        height: 30,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Colors.grey[400],
+        ),
+      ),
+      errorWidget: (context, url, error) => Icon(
+        Icons.sports_football,
+        size: 30,
+        color: Colors.grey[600],
       ),
     );
   }
@@ -146,12 +167,20 @@ class GameMatchup extends StatelessWidget {
               children: [
                 Expanded(
                   flex: 2,
-                  child: Text(
-                    game.awayTeam,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Row(
+                    children: [
+                      _buildTeamLogo(game.awayTeam),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          game.awayTeam,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
@@ -200,12 +229,20 @@ class GameMatchup extends StatelessWidget {
               children: [
                 Expanded(
                   flex: 2,
-                  child: Text(
-                    game.homeTeam,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Row(
+                    children: [
+                      _buildTeamLogo(game.homeTeam),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          game.homeTeam,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(

@@ -5,8 +5,9 @@ class GroupsService {
   final _supabase = Supabase.instance.client;
 
   Future<List<Group>> getUserGroups(String userId) async {
+      print('\n=== Starting getUserGroups in GroupsService ===\n');  // Add this
     try {
-      // First get the IDs of groups the user is a member of
+     print('Fetching groups for user: $userId');  // Add this      
       final groupsResponse = await _supabase
           .from('group_members')
           .select('group_id')
@@ -22,7 +23,6 @@ class GroupsService {
       final groupIds = (groupsResponse as List).map((g) => g['group_id']).toList();
       print('DEBUG: Found group IDs: $groupIds');
 
-      // Then get full details of those groups including ALL members
       final response = await _supabase
           .from('groups')
           .select('''
@@ -35,30 +35,39 @@ class GroupsService {
           ''')
           .inFilter('id', groupIds);
 
-      print('DEBUG: Raw groups response: $response');
+      print('\nDEBUG: Raw groups response: $response\n');
 
-      // Now fetch profiles for all members
       if (response != null && response is List && response.isNotEmpty) {
         for (var group in response) {
+          print('\nProcessing group: ${group['name']}');
           if (group['group_members'] != null) {
             for (var member in group['group_members']) {
+              print('\nFetching profile for member: ${member['user_id']}');
               final profileResponse = await _supabase
                   .from('user_profiles')
                   .select()
                   .eq('user_id', member['user_id'])
                   .single();
               
+              print('Profile response: $profileResponse');
+              
               if (profileResponse != null) {
                 member['user_profiles'] = profileResponse;
+                print('Added profile to member: ${member['user_profiles']}');
               }
             }
           }
         }
+
+        final groups = (response as List)
+            .map((group) => Group.fromJson(group))
+            .toList();
+        
+        print('\n=== Final processed groups: $groups ===\n');
+        return groups;
       }
 
-      return (response as List)
-          .map((group) => Group.fromJson(group))
-          .toList();
+      return [];
     } catch (e) {
       print('Error fetching user groups: $e');
       return [];
