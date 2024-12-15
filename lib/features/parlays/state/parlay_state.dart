@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
-import '../models/placeholder_pick.dart';
-import '../models/game.dart';
-import '../../groups/models/group.dart';
-import '../../../core/utils/odds_calculator.dart';
+import 'package:big_board/features/parlays/models/placeholder_pick.dart';
+import 'package:big_board/features/parlays/models/game.dart';
+import 'package:big_board/features/groups/models/group.dart';
+import 'package:big_board/core/utils/odds_calculator.dart';
+import 'package:big_board/features/parlays/helpers/pick_helper.dart';
+import 'package:big_board/features/parlays/helpers/betting_helper.dart';
 
 class ParlayState extends ChangeNotifier {
   // Existing state
@@ -76,19 +78,15 @@ class ParlayState extends ChangeNotifier {
   }
 
   void togglePick(String gameId, String team, String betType) {
-    print('ParlayState.togglePick implementation called'); // Debug print
     final pickId = '$gameId-$betType-$team';
-    
+    notifyListeners();
     if (_selectedPicks.contains(pickId)) {
-      print('Removing pick: $pickId'); // Debug print
       _selectedPicks.remove(pickId);
     } else {
-      print('Adding pick: $pickId'); // Debug print
       _selectedPicks.add(pickId);
     }
-    
     notifyListeners();
-    print('Current selectedPicks: $_selectedPicks'); // Debug print
+    notifyListeners();
   }
 
   void removePick(String pickId) {
@@ -119,16 +117,11 @@ class ParlayState extends ChangeNotifier {
   }
 
   double getPickOdds(String pickId) {
-    final parts = pickId.split('-');
-    final gameId = parts[0];
-    final betType = parts[1];
-    final team = parts[2];
-    
-    final game = _games[gameId];
+    final pick = PickHelper(pickId);
+    final game = _games[pick.gameId];
     if (game == null) return -110.0;
     
-    final isHome = team == 'home';
-    final selectedTeam = isHome ? game.homeTeam : game.awayTeam;
+    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
     
     final bookmaker = game.bookmakers.firstWhere(
       (b) => b.key == 'fanduel',
@@ -136,8 +129,8 @@ class ParlayState extends ChangeNotifier {
     );
     
     final market = bookmaker.markets.firstWhere(
-      (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
-      orElse: () => Market(key: betType == 'spread' ? 'spreads' : 'h2h', 
+      (m) => m.key == (pick.betType == 'spread' ? 'spreads' : 'h2h'),
+      orElse: () => Market(key: pick.betType == 'spread' ? 'spreads' : 'h2h', 
                           lastUpdate: DateTime.now(), 
                           outcomes: []),
     );
@@ -161,44 +154,16 @@ class ParlayState extends ChangeNotifier {
 
   // Get formatted odds for a pick
   String getFormattedOdds(String pickId) {
-    final parts = pickId.split('-');
-    final gameId = parts[0];
-    final betType = parts[1];
-    final team = parts[2];
-    final game = getGameById(gameId);
-    
+    final pick = PickHelper(pickId);
+    final game = getGameById(pick.gameId);
     if (game == null) return "+100";
     
-    final bookmaker = game.bookmakers.firstWhere(
-      (b) => b.key == 'fanduel',
-      orElse: () => game.bookmakers.first,
-    );
+    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+    final bookmaker = BettingHelper.getBookmaker(game);
+    final market = BettingHelper.getMarket(bookmaker, pick.betType);
+    final outcome = BettingHelper.getOutcome(market, selectedTeam);
     
-    if (betType == 'spread') {
-      final market = bookmaker.markets.firstWhere(
-        (m) => m.key == 'spreads',
-        orElse: () => Market(key: 'spreads', lastUpdate: DateTime.now(), outcomes: []),
-      );
-      
-      final outcome = market.outcomes.firstWhere(
-        (o) => o.name == team,
-        orElse: () => Outcome(name: '', price: -110, point: 0),
-      );
-      
-      return formatOdds(outcome.price); // Will show as (-110) for spreads
-    } else {
-      final market = bookmaker.markets.firstWhere(
-        (m) => m.key == 'h2h', // Note: moneyline is 'h2h' in the API
-        orElse: () => Market(key: 'h2h', lastUpdate: DateTime.now(), outcomes: []),
-      );
-      
-      final outcome = market.outcomes.firstWhere(
-        (o) => o.name == team,
-        orElse: () => Outcome(name: '', price: 100, point: null),
-      );
-      
-      return formatOdds(outcome.price); // Will show as just +110 for moneyline
-    }
+    return formatOdds(outcome.price);
   }
 
   String formatOdds(int odds) {
@@ -210,43 +175,23 @@ class ParlayState extends ChangeNotifier {
 
   // Get game details for display
   Map<String, String> getGameDetails(String pickId) {
-    final parts = pickId.split('-');
-    final gameId = parts[0];
-    final betType = parts[1];
-    final team = parts[2];
-    
-    print('Looking up game with id: $gameId'); // Debug
-    print('Available games in ParlayState: ${_games.keys.toList()}'); // Debug
-    
-    final game = _games[gameId];
+    final pick = PickHelper(pickId);
+    final game = _games[pick.gameId];
     if (game == null) {
-      print('Game not found in ParlayState!'); // Debug
       return {
-        'team': team,
+        'team': pick.team,
         'opponent': 'Unknown',
         'details': '',
       };
     }
 
-    final isHome = team == 'home';
-    final selectedTeam = isHome ? game.homeTeam : game.awayTeam;
-    final opponent = isHome ? game.awayTeam : game.homeTeam;
+    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+    final opponent = pick.isHome ? game.awayTeam : game.homeTeam;
     
-    if (betType == 'spread') {
-      final bookmaker = game.bookmakers.firstWhere(
-        (b) => b.key == 'fanduel',
-        orElse: () => game.bookmakers.first,
-      );
-      
-      final spreads = bookmaker.markets.firstWhere(
-        (m) => m.key == 'spreads',
-        orElse: () => Market(key: 'spreads', lastUpdate: DateTime.now(), outcomes: []),
-      );
-
-      final outcome = spreads.outcomes.firstWhere(
-        (o) => o.name == selectedTeam,
-        orElse: () => Outcome(name: '', price: 0, point: 0),
-      );
+    if (pick.betType == 'spread') {
+      final bookmaker = BettingHelper.getBookmaker(game);
+      final market = BettingHelper.getMarket(bookmaker, 'spread');
+      final outcome = BettingHelper.getOutcome(market, selectedTeam);
 
       return {
         'team': selectedTeam,
@@ -265,53 +210,23 @@ class ParlayState extends ChangeNotifier {
   String getSpreadForTeam(Game? game, String team) {
     if (game == null) return "0";
     
-    final bookmaker = game.bookmakers.firstWhere(
-      (b) => b.key == 'fanduel',
-      orElse: () => game.bookmakers.first,
-    );
-    
-    final spreads = bookmaker.markets.firstWhere(
-      (m) => m.key == 'spreads',
-      orElse: () => Market(key: 'spreads', lastUpdate: DateTime.now(), outcomes: []),
-    );
-    
-    final outcome = spreads.outcomes.firstWhere(
-      (o) => o.name == team,
-      orElse: () => Outcome(name: '', price: -110, point: 0),
-    );
+    final bookmaker = BettingHelper.getBookmaker(game);
+    final market = BettingHelper.getMarket(bookmaker, 'spread');
+    final outcome = BettingHelper.getOutcome(market, team);
     
     final point = outcome.point ?? 0;
     return point >= 0 ? '+$point' : point.toString();
   }
 
   int getOddsForPick(String pickId) {
-    final parts = pickId.split('-');
-    final gameId = parts[0];
-    final betType = parts[1];
-    final team = parts[2];
+    final pick = PickHelper(pickId);
+    final game = _games[pick.gameId];
+    if (game == null) return -110;
     
-    final game = _games[gameId];
-    if (game == null) return -110; // Default odds
-    
-    final isHome = team == 'home';
-    final selectedTeam = isHome ? game.homeTeam : game.awayTeam;
-    
-    final bookmaker = game.bookmakers.firstWhere(
-      (b) => b.key == 'fanduel',
-      orElse: () => game.bookmakers.first,
-    );
-    
-    final market = bookmaker.markets.firstWhere(
-      (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
-      orElse: () => Market(key: betType == 'spread' ? 'spreads' : 'h2h', 
-                          lastUpdate: DateTime.now(), 
-                          outcomes: []),
-    );
-
-    final outcome = market.outcomes.firstWhere(
-      (o) => o.name == selectedTeam,
-      orElse: () => Outcome(name: '', price: 100, point: null),
-    );
+    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+    final bookmaker = BettingHelper.getBookmaker(game);
+    final market = BettingHelper.getMarket(bookmaker, pick.betType);
+    final outcome = BettingHelper.getOutcome(market, selectedTeam);
 
     return outcome.price;
   }

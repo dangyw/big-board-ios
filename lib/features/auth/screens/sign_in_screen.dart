@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:big_board/features/auth/services/auth_service.dart';
-import 'package:big_board/features/parlays/screens/main_screen.dart';
+import 'package:big_board/features/parlays/screens/parlay_screen.dart';
+
 
 class SignInScreen extends StatelessWidget {
   const SignInScreen({super.key});

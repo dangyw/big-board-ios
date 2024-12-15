@@ -252,7 +252,7 @@ class UserProfileProvider extends ChangeNotifier {
           .update({'photo_url': url})
           .eq('user_id', userId);
 
-      // Update the local profile object
+      // Update local profile and notify listeners
       _profile = _profile?.copyWith(photoURL: url);
       _profileController.add(_profile);
       notifyListeners();

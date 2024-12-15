@@ -5,7 +5,8 @@ import 'package:big_board/features/auth/services/auth_service.dart';
 import 'package:big_board/features/auth/screens/sign_in_screen.dart';
 import 'package:big_board/features/profile/services/user_profile_service.dart';
 import 'package:big_board/features/profile/screens/create_profile_screen.dart';
-import 'package:big_board/features/parlays/screens/main_screen.dart';
+import 'package:big_board/features/parlays/screens/parlay_screen.dart';
+
 
 class AuthGuard extends StatelessWidget {
   const AuthGuard({super.key});
@@ -39,7 +40,7 @@ class AuthGuard extends StatelessWidget {
               }
 
               if (profileSnapshot.data == true) {
-                return const MainScreen();
+                return const ParlayScreen();
               } else {
                 return CreateProfileScreen(user: user);
               }

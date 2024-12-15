@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:big_board/features/parlays/models/saved_parlay.dart';
 import 'package:big_board/features/parlays/models/parlay_invitation.dart';
 import 'dart:async';
-import '../models/placeholder_pick.dart';
+import 'package:big_board/features/parlays/models/placeholder_pick.dart';
 
 class ParlayService {
   final _supabase = Supabase.instance.client;

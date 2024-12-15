@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:big_board/features/profile/services/user_profile_provider.dart';
 import 'package:big_board/features/profile/services/user_profile_service.dart';
-import 'package:big_board/features/parlays/screens/main_screen.dart';
-import '../models/user_profile.dart';
+import 'package:big_board/features/parlays/screens/parlay_screen.dart';
+import 'package:big_board/features/profile/models/user_profile.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:image_cropper/image_cropper.dart';
@@ -193,7 +193,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => MainScreen()),
+          MaterialPageRoute(builder: (_) => ParlayScreen()),
         );
       }
     } catch (e) {

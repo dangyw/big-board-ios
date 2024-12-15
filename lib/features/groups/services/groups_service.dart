@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/group.dart';
+import 'package:big_board/features/groups/models/group.dart';
 
 class GroupsService {
   final _supabase = Supabase.instance.client;

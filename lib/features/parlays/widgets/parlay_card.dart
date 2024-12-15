@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../state/parlay_state.dart';
-import '../../groups/models/group.dart';
-import '../../services/parlay_service.dart';
+import 'package:big_board/features/parlays/state/parlay_state.dart';
+import 'package:big_board/features/groups/models/group.dart';
+import 'package:big_board/features/parlays/services/parlay_service.dart';
 import 'package:big_board/features/parlays/models/saved_parlay.dart';
-import '../models/game.dart';
-import '../../profile/models/user_profile.dart';
+import 'package:big_board/features/parlays/models/game.dart';
+import 'package:big_board/features/profile/models/user_profile.dart';
+import 'package:big_board/features/parlays/helpers/pick_helper.dart';
+import 'package:big_board/features/parlays/helpers/betting_helper.dart';
 
 class ParlayCard extends StatefulWidget {
   final ParlayState parlayState;
@@ -168,11 +170,6 @@ class _ParlayCardState extends State<ParlayCard> {
                             final details = parlayState.getGameDetails(pickId);
                             final betType = pickId.split('-')[1];
                             final odds = parlayState.getFormattedOdds(pickId);
-                            print('Pick ID: $pickId');
-                            print('Bet Type: $betType');
-                            print('Formatted Odds: ${parlayState.getFormattedOdds(pickId)}');
-                            print('Game Details: ${details}');
-                            print('Raw Game: ${parlayState.getGameById(pickId.split('-')[0])}');
                             
                             return Card(
                               margin: EdgeInsets.only(bottom: 8),
@@ -306,29 +303,14 @@ class _ParlayCardState extends State<ParlayCard> {
   }
 
   String getSpreadDisplay(String pickId) {
-    final parts = pickId.split('-');
-    final gameId = parts[0];
-    final team = parts[2];
-    final game = widget.parlayState.getGameById(gameId);
-    
+    final pick = PickHelper(pickId);
+    final game = widget.parlayState.getGameById(pick.gameId);
     if (game == null) return "0";
     
-    final bookmaker = game.bookmakers.firstWhere(
-      (b) => b.key == 'fanduel',
-      orElse: () => game.bookmakers.first,
-    );
-    
-    final spreads = bookmaker.markets.firstWhere(
-      (m) => m.key == 'spreads',
-      orElse: () => Market(key: 'spreads', lastUpdate: DateTime.now(), outcomes: []),
-    );
-    
-    final actualTeam = team == 'home' ? game.homeTeam : game.awayTeam;
-    
-    final outcome = spreads.outcomes.firstWhere(
-      (o) => o.name == actualTeam,
-      orElse: () => Outcome(name: '', price: -110, point: 0),
-    );
+    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+    final bookmaker = BettingHelper.getBookmaker(game);
+    final market = BettingHelper.getMarket(bookmaker, 'spread');
+    final outcome = BettingHelper.getOutcome(market, selectedTeam);
     
     final point = outcome.point ?? 0;
     return point >= 0 ? '+$point' : point.toString();

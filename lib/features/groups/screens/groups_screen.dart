@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/group.dart';
-import '../services/groups_service.dart';
+import 'package:big_board/features/groups/models/group.dart';
+import 'package:big_board/features/groups/services/groups_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class GroupsScreen extends StatefulWidget {

@@ -8,7 +8,7 @@ import 'package:big_board/features/auth/widgets/auth_guard.dart';
 import 'package:big_board/features/profile/services/user_profile_service.dart';
 import 'package:big_board/features/profile/services/user_profile_provider.dart';
 import 'package:big_board/features/profile/screens/create_profile_screen.dart';
-import 'package:big_board/features/parlays/screens/main_screen.dart';
+import 'package:big_board/features/parlays/screens/parlay_screen.dart';
 import 'features/parlays/state/parlay_provider.dart';
 
 void main() async {
@@ -75,7 +75,7 @@ class AuthCheckScreen extends StatelessWidget {
               }
 
               if (profileSnapshot.data == true) {
-                return MainScreen();
+                return ParlayScreen();
               } else {
                 // Pass the user to CreateProfileScreen
                 return CreateProfileScreen(user: user);
