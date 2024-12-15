@@ -8,6 +8,9 @@ import 'package:big_board/features/parlays/models/game.dart';
 import 'package:big_board/features/profile/models/user_profile.dart';
 import 'package:big_board/features/parlays/helpers/pick_helper.dart';
 import 'package:big_board/features/parlays/helpers/betting_helper.dart';
+import 'package:big_board/core/utils/odds_calculator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:big_board/core/services/espn_service.dart';
 
 class ParlayCard extends StatefulWidget {
   final ParlayState parlayState;
@@ -118,10 +121,58 @@ class _ParlayCardState extends State<ParlayCard> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              '${parlayState.selectedPicks.length} Team Parlay',
-                              style: Theme.of(context).textTheme.titleMedium,
+                            Row(
+                              children: [
+                                // Status Icon
+                                if (parlayState.isGroupMode)
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Stack(
+                                      children: [
+                                        CircularProgressIndicator(
+                                          value: parlayState.selectedPicks.length / 
+                                                (parlayState.selectedPicks.length + parlayState.placeholderPicks.length),
+                                          backgroundColor: Colors.orange.withOpacity(0.3),
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                                          strokeWidth: 6,  // Make it thicker for donut appearance
+                                          strokeCap: StrokeCap.round,  // Rounds the ends of the progress
+                                        ),
+                                        if (parlayState.placeholderPicks.isEmpty)
+                                          Positioned.fill(
+                                            child: Center(
+                                              child: Container(
+                                                width: 12,  // Smaller checkmark
+                                                height: 12,
+                                                child: Icon(
+                                                  Icons.check,
+                                                  size: 10,
+                                                  color: Colors.green,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                SizedBox(width: 8),
+                                // Title
+                                Text(
+                                  '${parlayState.selectedPicks.length + parlayState.placeholderPicks.length} Leg Parlay',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                                // Pending Count
+                                if (parlayState.isGroupMode && parlayState.placeholderPicks.isNotEmpty)
+                                  Text(
+                                    ' (${parlayState.placeholderPicks.length} Pending)',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                              ],
                             ),
+                            // Odds
                             Text(
                               'Total Odds: ${totalOdds >= 0 ? "+$totalOdds" : totalOdds}',
                               style: TextStyle(
@@ -154,7 +205,7 @@ class _ParlayCardState extends State<ParlayCard> {
                             ),
                             SizedBox(width: 16),
                             Text(
-                              'Return: ${(widget.parlayState.units * (totalOdds/100)).toStringAsFixed(1)} Units',
+                              'Return: ${(widget.parlayState.units * OddsCalculator.usToDecimal(totalOdds)).toStringAsFixed(2)} Units',
                               style: TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -176,7 +227,7 @@ class _ParlayCardState extends State<ParlayCard> {
                               child: ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: Colors.grey[200],
-                                  child: Icon(Icons.sports_football, color: Colors.indigo),
+                                  child: _buildTeamLogo(details['team'] ?? ''),
                                 ),
                                 title: Text(details['team'] ?? ''),
                                 subtitle: Column(
@@ -228,48 +279,60 @@ class _ParlayCardState extends State<ParlayCard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Add debug prints here, outside of the widget tree
+                              Builder(builder: (context) {
+                                print('DEBUG - Member Photos Map: ${widget.memberPhotos}');
+                                print('DEBUG - User Groups: ${widget.userGroups.map((g) => g.members.map((m) => '${m.id}: ${m.name}').join(', ')).join('\n')}');
+                                return SizedBox.shrink();
+                              }),
                               Text(
                                 'Group Picks',
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
-                              ...parlayState.placeholderPicks.map((pick) => Card(
-                                margin: EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Colors.grey[200],
-                                    backgroundImage: pick.assignedUserId != null && widget.memberPhotos[pick.assignedUserId] != null
-                                        ? NetworkImage(widget.memberPhotos[pick.assignedUserId]!)
-                                        : null,
-                                    child: (pick.assignedUserId == null || widget.memberPhotos[pick.assignedUserId] == null)
-                                        ? Icon(Icons.person_outline, color: Colors.indigo)
-                                        : null,
+                              ...parlayState.placeholderPicks.map((pick) {
+                                print('DEBUG - Placeholder Pick: ${pick.id}');
+                                print('DEBUG - Assigned User ID: ${pick.assignedUserId}');
+                                print('DEBUG - Photo URL for user: ${widget.memberPhotos[pick.assignedUserId]}');
+                                
+                                return Card(
+                                  margin: EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: Colors.grey[200],
+                                      backgroundImage: pick.assignedUserId != null && widget.memberPhotos[pick.assignedUserId] != null
+                                          ? NetworkImage(widget.memberPhotos[pick.assignedUserId]!)
+                                          : null,
+                                      child: (pick.assignedUserId == null || widget.memberPhotos[pick.assignedUserId] == null)
+                                          ? Icon(Icons.person_outline, color: Colors.indigo)
+                                          : null,
+                                    ),
+                                    title: Text('Group Pick'),
+                                    subtitle: Text('Assign to group member'),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        DropdownButton<String>(
+                                          hint: Text('Select User'),
+                                          value: pick.assignedUserId,
+                                          items: widget.userGroups
+                                              .expand((group) => group.members)
+                                              .map((member) => DropdownMenuItem(
+                                                    value: member.userId,
+                                                    child: Text(member.name),
+                                                  ))
+                                              .toList(),
+                                          onChanged: (value) =>
+                                              parlayState.assignUserToPlaceholder(pick.id, value),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.close),
+                                          onPressed: () => parlayState.removePlaceholderPick(pick.id),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  title: Text('Group Pick'),
-                                  subtitle: Text('Assign to group member'),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      DropdownButton<String>(
-                                        hint: Text('Select User'),
-                                        value: pick.assignedUserId,
-                                        items: widget.userGroups
-                                            .expand((group) => group.members)
-                                            .map((member) => DropdownMenuItem(
-                                                  value: member.id,
-                                                  child: Text(member.name),
-                                                ))
-                                            .toList(),
-                                        onChanged: (value) =>
-                                            parlayState.assignUserToPlaceholder(pick.id, value),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(Icons.close),
-                                        onPressed: () => parlayState.removePlaceholderPick(pick.id),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )).toList(),
+                                );
+                              }).toList(),
                               TextButton.icon(
                                 icon: Icon(Icons.add),
                                 label: Text('Add Group Pick'),
@@ -349,6 +412,29 @@ class _ParlayCardState extends State<ParlayCard> {
     );
     
     return outcome.price >= 0 ? '+${outcome.price}' : '${outcome.price}';
+  }
+
+  Widget _buildTeamLogo(String teamName) {
+    final url = EspnService.getTeamLogoUrl(teamName);
+    
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: 30,
+      height: 30,
+      placeholder: (context, url) => SizedBox(
+        width: 30,
+        height: 30,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: Colors.grey[400],
+        ),
+      ),
+      errorWidget: (context, url, error) => Icon(
+        Icons.sports_football,
+        size: 30,
+        color: Colors.grey[600],
+      ),
+    );
   }
 }
 

@@ -78,9 +78,24 @@ class SavedParlay {
   bool get isGroupParlay => groupId != null;
 
   String get displayTitle {
-    final baseTitle = '${picks.length} Team Parlay';
-    return isGroupParlay ? 'Group $baseTitle' : baseTitle;
+    final regularPicks = picks.length;
+    final placeholderCount = placeholderPicks?.length ?? 0;
+    final totalPicks = regularPicks + placeholderCount;
+    
+    final baseTitle = '$totalPicks Leg Parlay';
+    
+    if (isGroupParlay && placeholderCount > 0) {
+      final pendingText = placeholderCount == totalPicks 
+          ? '(All Pending)' 
+          : '($placeholderCount Pending)';
+      return '$baseTitle $pendingText';
+    }
+    
+    return baseTitle;
   }
+
+  bool get hasPlaceholderPicks => placeholderPicks?.isNotEmpty ?? false;
+  int get pendingPicksCount => placeholderPicks?.length ?? 0;
 }
 
 class SavedPick {
