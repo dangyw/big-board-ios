@@ -15,7 +15,7 @@ class ParlayState extends ChangeNotifier {
   double _units = 1.0;
 
   // Add game storage
-  Map<String, Game> _games = {};
+  List<Game> _games = [];
 
   // Getters
   bool get isGroupMode => _isGroupMode;
@@ -77,15 +77,24 @@ class ParlayState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void togglePick(String gameId, String team, String betType) {
-    final pickId = '$gameId-$betType-$team';
-    notifyListeners();
+  void togglePick(String gameId, String outcomeId, String betType) {
+    final pickId = '${gameId}_${outcomeId}_${betType}';
+    
+    // If this exact pick is already selected, remove it and return
     if (_selectedPicks.contains(pickId)) {
       _selectedPicks.remove(pickId);
-    } else {
-      _selectedPicks.add(pickId);
+      notifyListeners();
+      return;
     }
-    notifyListeners();
+    
+    // Remove any other picks from the same game
+    _selectedPicks.removeWhere((pick) {
+      final existingGameId = pick.split('_')[0];
+      return existingGameId == gameId;
+    });
+
+    // Add the new pick
+    _selectedPicks.add(pickId);
     notifyListeners();
   }
 
@@ -99,14 +108,16 @@ class ParlayState extends ChangeNotifier {
     notifyListeners();
   }
 
-  int calculateTotalOdds() {
-    if (selectedPicks.isEmpty) return 0;
+  double calculateTotalOdds() {
+    if (_selectedPicks.isEmpty) return 0.0;
     
-    final List<int> odds = selectedPicks.map((pickId) {
-      return getPickOdds(pickId).toInt();
-    }).toList();
+    List<double> decimalOdds = [];
+    for (final pickId in _selectedPicks) {
+      final odds = getOddsForPick(pickId);
+      decimalOdds.add(odds);
+    }
     
-    return OddsCalculator.calculateParlayOdds(odds);
+    return OddsCalculator.calculateParlayOdds(decimalOdds);
   }
 
   void setUnits(double value) {
@@ -116,67 +127,77 @@ class ParlayState extends ChangeNotifier {
     }
   }
 
-  double getPickOdds(String pickId) {
-    final pick = PickHelper(pickId);
-    final game = _games[pick.gameId];
-    if (game == null) return -110.0;
+  double getOddsForPick(String pickId) {
+    final parts = pickId.split('_');
+    final gameId = parts[0];
+    final outcomeId = parts[1];  // 'home' or 'away'
+    final betType = parts[2];    // 'spread' or 'moneyline'
     
-    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+    final game = getGameById(gameId);
+    if (game == null) return 1.0;
     
-    final bookmaker = game.bookmakers.firstWhere(
-      (b) => b.key == 'fanduel',
-      orElse: () => game.bookmakers.first,
-    );
+    final bookmaker = game.bookmakers.first;
+    
+    // Map bet type to market key
+    final marketKey = betType == 'spread' ? 'spreads' : 'h2h';
     
     final market = bookmaker.markets.firstWhere(
-      (m) => m.key == (pick.betType == 'spread' ? 'spreads' : 'h2h'),
-      orElse: () => Market(key: pick.betType == 'spread' ? 'spreads' : 'h2h', 
-                          lastUpdate: DateTime.now(), 
-                          outcomes: []),
+      (m) => m.key == marketKey,
+      orElse: () => bookmaker.markets.first,
     );
-
+    
+    // Use the game's homeTeam/awayTeam properties
+    final targetTeam = outcomeId == 'home' ? game.homeTeam : game.awayTeam;
+    
     final outcome = market.outcomes.firstWhere(
-      (o) => o.name == selectedTeam,
-      orElse: () => Outcome(name: '', price: -110, point: null),
+      (o) => o.name == targetTeam,
+      orElse: () => market.outcomes.first,
     );
-
-    return outcome.price.toDouble();
+    
+    return outcome.price;
   }
 
-  // Add method to get game by ID
-  Game? getGameById(String id) => _games[id];
+  Game? getGameById(String gameId) {
+    try {
+      return _games.firstWhere((g) => g.id == gameId);
+    } catch (e) {
+      return null;
+    }
+  }
 
-  // Add method to store game
   void addGame(Game game) {
-    _games[game.id] = game;
+    _games.add(game);
     notifyListeners();
   }
 
-  // Get formatted odds for a pick
   String getFormattedOdds(String pickId) {
-    final pick = PickHelper(pickId);
-    final game = getGameById(pick.gameId);
-    if (game == null) return "+100";
-    
-    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
-    final bookmaker = BettingHelper.getBookmaker(game);
-    final market = BettingHelper.getMarket(bookmaker, pick.betType);
-    final outcome = BettingHelper.getOutcome(market, selectedTeam);
-    
-    return formatOdds(outcome.price);
-  }
-
-  String formatOdds(int odds) {
-    if (odds >= 0) {
-      return '+$odds';
+    try {
+      print('\n=== getFormattedOdds Debug ===');
+      print('PickId: $pickId');
+      
+      final pick = PickHelper(pickId);
+      final game = getGameById(pick.gameId);
+      
+      if (game == null) {
+        print('Game not found!');
+        return "-110";
+      }
+      
+      print('Game found: ${game.homeTeam} vs ${game.awayTeam}');
+      final odds = pick.getOutcome(game)?.price ?? 0.0;
+      print('Odds: $odds');
+      print('========================\n');
+      
+      return OddsCalculator.formatOdds(odds);
+    } catch (e) {
+      print('Error in getFormattedOdds: $e');
+      return "-110";
     }
-    return odds.toString();
   }
 
-  // Get game details for display
   Map<String, String> getGameDetails(String pickId) {
     final pick = PickHelper(pickId);
-    final game = _games[pick.gameId];
+    final game = getGameById(pick.gameId);
     if (game == null) {
       return {
         'team': pick.team,
@@ -196,7 +217,7 @@ class ParlayState extends ChangeNotifier {
       return {
         'team': selectedTeam,
         'opponent': opponent,
-        'details': '${outcome.point} (${outcome.price})',
+        'details': '${outcome.point} (${OddsCalculator.formatOdds(outcome.price)})',
       };
     }
 
@@ -218,24 +239,18 @@ class ParlayState extends ChangeNotifier {
     return point >= 0 ? '+$point' : point.toString();
   }
 
-  int getOddsForPick(String pickId) {
-    final pick = PickHelper(pickId);
-    final game = _games[pick.gameId];
-    if (game == null) return -110;
-    
-    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
-    final bookmaker = BettingHelper.getBookmaker(game);
-    final market = BettingHelper.getMarket(bookmaker, pick.betType);
-    final outcome = BettingHelper.getOutcome(market, selectedTeam);
-
-    return outcome.price;
+  void updateGames(List<Game> games) {
+    _games = games;
+    notifyListeners();
   }
 
-  void updateGames(List<Game> games) {
-    _games.clear();
-    for (final game in games) {
-      _games[game.id] = game;
-    }
+  String getFormattedOddsForPick(String pickId) {
+    final odds = getOddsForPick(pickId);
+    return OddsCalculator.formatOdds(odds);
+  }
+
+  void addPick(String pickId) {
+    _selectedPicks.add(pickId);
     notifyListeners();
   }
 } 

@@ -1,26 +1,30 @@
 class OddsCalculator {
-  static double usToDecimal(int usOdds) {
-    if (usOdds > 0) {
-      return 1 + (usOdds / 100);
+  /// Formats odds to a string with + prefix for positive odds
+  static String formatOdds(double decimalOdds) {
+    final americanOdds = decimalToAmerican(decimalOdds);
+    if (americanOdds >= 0) {
+      return '+$americanOdds';
     }
-    return 1 + (100 / usOdds.abs());
+    return americanOdds.toString();
   }
 
-  static int decimalToUs(double decimal) {
-    if (decimal >= 2) {
+  /// Converts decimal odds to American odds
+  static int decimalToAmerican(double decimal) {
+    if (decimal >= 2.0) {
       return ((decimal - 1) * 100).round();
+    } else {
+      return (-100 / (decimal - 1)).round();
     }
-    return (-100 / (decimal - 1)).round();
   }
 
-  static int calculateParlayOdds(List<int> odds) {
-    if (odds.isEmpty) return 0;
-    
-    final decimal = odds.fold(1.0, (acc, odd) => acc * usToDecimal(odd));
-    return decimalToUs(decimal);
+  /// Calculates total parlay odds by multiplying decimal odds
+  static double calculateParlayOdds(List<double> decimalOdds) {
+    if (decimalOdds.isEmpty) return 1.0;
+    return decimalOdds.fold(1.0, (a, b) => a * b);
   }
 
-  static String formatOdds(int odds) {
-    return odds > 0 ? '+$odds' : '$odds';
+  /// Calculates payout based on stake and decimal odds
+  static double calculatePayout(double stake, double decimalOdds) {
+    return stake * decimalOdds;
   }
 } 
