@@ -45,3 +45,5 @@ macos/Flutter/GeneratedPluginRegistrant.*
 *.env.*
 google-services.json
 GoogleService-Info.plist
+.flutter-plugins*
+.flutter-plugins-dependencies*
