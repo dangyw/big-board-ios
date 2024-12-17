@@ -26,17 +26,23 @@ class Group {
     'created_at': createdAt.toIso8601String(),
     'description': description,
     'avatar_url': avatarUrl,
+    'group_members': members.map((m) => m.toJson()).toList(),
   };
 
   factory Group.fromJson(Map<String, dynamic> json) {
+    print('Parsing group JSON: $json');
     var groupMembers = <GroupMember>[];
     if (json['group_members'] != null) {
+      print('Parsing ${json['group_members'].length} members');
       groupMembers = (json['group_members'] as List)
-          .map((member) => GroupMember.fromJson(member))
+          .map((member) {
+            print('Parsing member: $member');
+            return GroupMember.fromJson(member);
+          })
           .toList();
     }
 
-    return Group(
+    final group = Group(
       id: json['id'],
       name: json['name'],
       ownerId: json['owner_id'],
@@ -45,14 +51,11 @@ class Group {
       avatarUrl: json['avatar_url'],
       members: groupMembers,
     );
+    print('Successfully parsed group: ${group.name}');
+    return group;
   }
 
   List<String> get memberIds => members.map((m) => m.userId).toList();
-
-  @override
-  String toString() {
-    return 'Group(name: $name, id: $id, memberCount: ${members.length})';
-  }
 }
 
 class GroupMember {
@@ -60,6 +63,7 @@ class GroupMember {
   final String groupId;
   final String userId;
   final DateTime createdAt;
+  final String name;
   final UserProfile? profile;
 
   GroupMember({
@@ -67,18 +71,34 @@ class GroupMember {
     required this.groupId,
     required this.userId,
     required this.createdAt,
+    required this.name,
     this.profile,
   });
 
-  factory GroupMember.fromJson(Map<String, dynamic> json) => GroupMember(
-    id: json['id'],
-    groupId: json['group_id'] ?? '',
-    userId: json['user_id'],
-    createdAt: DateTime.parse(json['created_at']),
-    profile: json['user_profiles'] != null
-        ? UserProfile.fromJson(json['user_profiles'])
-        : null,
-  );
+  factory GroupMember.fromJson(Map<String, dynamic> json) {
+    print('Creating GroupMember from JSON: $json');
+    
+    final profileData = json['user_profiles'] as Map<String, dynamic>?;
+    final name = profileData?['display_name'] ?? 'Unknown User';
+    
+    return GroupMember(
+      id: json['id'],
+      groupId: json['group_id'] ?? '',
+      userId: json['user_id'],
+      createdAt: DateTime.parse(json['created_at']),
+      name: name,
+      profile: profileData != null ? UserProfile.fromJson(profileData) : null,
+    );
+  }
 
-  String get name => profile?.displayName ?? 'Unknown User';
-} 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'group_id': groupId,
+    'user_id': userId,
+    'created_at': createdAt.toIso8601String(),
+    'name': name,
+    'profile': profile?.toJson(),
+  };
+
+  String get displayName => profile?.displayName ?? name;
+}

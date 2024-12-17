@@ -19,8 +19,6 @@ class AuthGuard extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        print('Auth state in wrapper: ${snapshot.data?.event}'); // Debug log
-        print('User in wrapper: ${snapshot.data?.session?.user?.id}'); // Debug log
         
         if (snapshot.connectionState == ConnectionState.active) {
           final user = snapshot.data?.session?.user;

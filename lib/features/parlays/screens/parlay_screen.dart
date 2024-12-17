@@ -17,7 +17,6 @@ import 'package:big_board/features/groups/models/group.dart';
 import 'package:big_board/features/groups/services/groups_service.dart';
 import 'package:big_board/features/groups/screens/groups_screen.dart';
 import 'package:big_board/features/parlays/widgets/parlay_summary_bar.dart';
-import 'package:big_board/features/parlays/widgets/parlay_details_sheet.dart';
 import 'package:big_board/features/profile/services/user_profile_service.dart';
 import 'package:big_board/features/parlays/models/parlay_invitation.dart';
 import 'package:big_board/features/auth/services/auth_service.dart';
@@ -27,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'package:big_board/features/parlays/state/parlay_state.dart';
 import 'package:uuid/uuid.dart';
 import 'package:big_board/features/parlays/helpers/pick_helper.dart';
+import 'package:big_board/core/services/odds_service.dart';
 
 class ParlayScreen extends StatefulWidget {
   const ParlayScreen({Key? key}) : super(key: key);
@@ -51,25 +51,47 @@ class _ParlayScreenState extends State<ParlayScreen> {
   final GroupsService _groupsService = GroupsService();
   bool _isProcessingToggle = false;
   late final ParlayState _parlayState;
+  final OddsService _oddsService = OddsService();
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _parlayState = Provider.of<ParlayState>(context, listen: false);
+    //_testOddsService();
     _loadInitialData();
+  }
+
+  Future<void> _testOddsService() async {
+    try {
+      await _oddsService.testApiConnection();
+      
+      final games = await _oddsService.getGames();
+      
+      if (games.isNotEmpty) {
+        final firstGame = games.first;
+        
+        if (firstGame.bookmakers.isNotEmpty) {
+          final bookmaker = firstGame.bookmakers.first;
+          for (var market in bookmaker.markets) {
+            for (var outcome in market.outcomes) {
+            }
+          }
+        }
+      }
+    } catch (e) {
+    }
   }
 
   Future<void> _loadInitialData() async {
     try {
       // Load games, groups, and user profile in parallel
       await Future.wait([
-        _loadMockData(),
+        _loadGames(),
         _loadUserGroups(),
         _initializeUserProfile(),
       ]);
     } catch (e) {
-      print('Error loading initial data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading data')),
@@ -79,31 +101,48 @@ class _ParlayScreenState extends State<ParlayScreen> {
   }
 
   Future<void> _loadUserGroups() async {
-    print('\n=== Starting _loadUserGroups in ParlayScreen ===\n');
     if (currentUser != null) {
-      print('Current User ID: ${currentUser!.id}');
-      final groups = await _groupsService.getUserGroups(currentUser!.id);
-      print('Groups returned: $groups');
-      if (mounted) {
-        setState(() {
-          userGroups = groups;
-          
-          memberPhotos.clear();
-          for (var group in groups) {
-            for (var member in group.members) {
-              print('Processing member: ${member.userId}');
-              print('Member Profile: ${member.profile?.toJson()}');
-              if (member.profile?.photoURL != null) {
-                memberPhotos[member.userId] = member.profile!.photoURL!;
-                print('Added photo: ${member.profile!.photoURL}');
-              }
+      try {
+        print('Loading groups for user: ${currentUser!.id}');
+        final groups = await _groupsService.getUserGroups(currentUser!.id);
+        print('Loaded groups count: ${groups.length}');
+        
+        // Process member photos and names
+        final photoMap = <String, String>{};
+        final nameMap = <String, String>{};
+        
+        for (var group in groups) {
+          print('Group: ${group.name} (ID: ${group.id}) - Members: ${group.members.length}');
+          for (var member in group.members) {
+            // Use the displayName getter from GroupMember
+            nameMap[member.userId] = member.displayName;
+            
+            if (member.profile?.photoURL != null) {
+              photoMap[member.userId] = member.profile!.photoURL!;
             }
           }
-          print('Final memberPhotos map: $memberPhotos');
-        });
+        }
+
+        // Update state only once with all the data
+        if (mounted) {
+          setState(() {
+            userGroups = groups;
+            memberPhotos.clear();
+            memberPhotos.addAll(photoMap);
+            memberNames.clear();
+            memberNames.addAll(nameMap);
+          });
+          print('Updated state with groups: ${userGroups.length}');
+          print('Member names loaded: ${nameMap.keys.length}');
+        }
+        
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error loading user groups')),
+          );
+        }
       }
-    } else {
-      print('No current user found');
     }
   }
 
@@ -172,44 +211,82 @@ class _ParlayScreenState extends State<ParlayScreen> {
           throw Exception('Could not load user profile');
         }
       } catch (e) {
-        print("Error loading user profile: $e");
         rethrow; // Propagate error to be caught by _loadInitialData
       }
     }
   }
 
-  Future<void> _loadMockData() async {
+  Future<void> _loadGames() async {
     setState(() {
       isLoading = true;
     });
     
-    final loadedGames = await MockDataLoader.loadGames();
-    
-    setState(() {
-      games = loadedGames;
-      isLoading = false;
-    });
-
-    // Update ParlayState with the loaded games
-    _parlayState.updateGames(loadedGames);
+    try {
+      final loadedGames = await _oddsService.getGames();
+      
+      print('\n=== Initial Games Load ===');
+      for (var game in loadedGames) {
+        print('Game: ${game.homeTeam} vs ${game.awayTeam}');
+        for (var bookmaker in game.bookmakers) {
+          print('  Bookmaker: ${bookmaker.key}');
+          for (var market in bookmaker.markets) {
+            print('    Market: ${market.key}');
+            for (var outcome in market.outcomes) {
+              print('      ${outcome.name}: ${outcome.price} (point: ${outcome.point})');
+            }
+          }
+        }
+      }
+      print('========================\n');
+      
+      if (mounted) {
+        setState(() {
+          games = loadedGames;
+          isLoading = false;
+        });
+        
+        // Update ParlayState with the loaded games
+        _parlayState.updateGames(loadedGames);
+      }
+    } catch (e) {
+      print('Error loading games: $e');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading games')),
+        );
+      }
+    }
   }
 
   void togglePick(String gameId, String team, String betType) {
-    final pickId = '$gameId-$betType-$team';
+    final outcomeId = team;  // 'home' or 'away'
+    final pickId = '${gameId}_${outcomeId}_${betType}';
     
-    // Check if there's already a pick from this game
+    print('Toggling pick: $pickId');
+    print('Current picks: ${_parlayState.selectedPicks}');
+    
+    // Check if this exact pick is already selected
+    if (_parlayState.selectedPicks.contains(pickId)) {
+      print('Pick already selected, removing...');
+      _parlayState.removePick(pickId);
+      return;
+    }
+
+    // Check if there's already a different pick from this game
     final existingPick = _parlayState.selectedPicks.firstWhere(
-      (pick) => pick.split('-')[0] == gameId,
+      (pick) => pick.split('_')[0] == gameId,
       orElse: () => '',
     );
 
     if (existingPick.isNotEmpty && existingPick != pickId) {
-      // Remove existing pick from this game before adding new one
       _parlayState.removePick(existingPick);
     }
     
     setState(() {
-      _parlayState.togglePick(gameId, team, betType);
+      _parlayState.togglePick(gameId, outcomeId, betType);
     });
   }
 
@@ -223,7 +300,7 @@ class _ParlayScreenState extends State<ParlayScreen> {
       userId: currentUser?.id ?? '',
       groupId: groupId,
       picks: _convertPicksToSavedPicks(_parlayState.selectedPicks).toList(),
-      totalOdds: _calculateTotalOdds(),
+      totalOdds: _parlayState.calculateTotalOdds(),
       units: 10.0,
       createdAt: DateTime.now(),
     );
@@ -234,7 +311,6 @@ class _ParlayScreenState extends State<ParlayScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      print('Error saving parlay: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to save parlay: $e')),
@@ -279,6 +355,19 @@ class _ParlayScreenState extends State<ParlayScreen> {
   }
 
   void _showParlayDetails() {
+    print('Showing parlay details');
+    print('Available groups: ${userGroups.length}');
+    for (var group in userGroups) {
+      print('Group in showParlayDetails: ${group.name} (${group.id})');
+    }
+
+    if (_parlayState.selectedPicks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select at least one pick')),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -295,33 +384,6 @@ class _ParlayScreenState extends State<ParlayScreen> {
     );
   }
 
-  int _calculateTotalOdds() {
-    final List<int> odds = _parlayState.selectedPicks.map((pickId) {
-      final parts = pickId.split('-');
-      final gameId = parts[0];
-      final betType = parts[1];
-      final team = parts[2];
-      
-      final game = games.firstWhere((g) => g.id == gameId);
-      final bookmaker = game.bookmakers.firstWhere(
-        (b) => b.key == 'fanduel',
-        orElse: () => game.bookmakers.first,
-      );
-      
-      final market = bookmaker.markets.firstWhere(
-        (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
-      );
-      
-      final outcome = market.outcomes.firstWhere(
-        (o) => o.name == (team == 'home' ? game.homeTeam : game.awayTeam),
-      );
-      
-      return outcome.price;
-    }).toList();
-    
-    return OddsCalculator.calculateParlayOdds(odds);
-  }
-
   void _handleParlaySave(String? groupId, Map<String, String> assignments) {
     // Create parlay with group ID if present
     // Store member assignments for each pick
@@ -331,31 +393,28 @@ class _ParlayScreenState extends State<ParlayScreen> {
 
   List<SavedPick> _convertPicksToSavedPicks(Set<String> picks) {
     return picks.map((pickId) {
-      final parts = pickId.split('-');
-      final gameId = parts[0];
-      final betType = parts[1];
-      final team = parts[2];
+      final helper = PickHelper(pickId);  // Use PickHelper to parse the ID
+      final game = games.firstWhere((g) => g.id == helper.gameId);
       
-      final game = games.firstWhere((g) => g.id == gameId);
       final bookmaker = game.bookmakers.firstWhere(
         (b) => b.key == 'fanduel',
         orElse: () => game.bookmakers.first,
       );
       
       final market = bookmaker.markets.firstWhere(
-        (m) => m.key == (betType == 'spread' ? 'spreads' : 'h2h'),
+        (m) => m.key == (helper.betType == 'spread' ? 'spreads' : 'h2h'),
       );
       
       final outcome = market.outcomes.firstWhere(
-        (o) => o.name == (team == 'home' ? game.homeTeam : game.awayTeam),
+        (o) => o.name == (helper.isHome ? game.homeTeam : game.awayTeam),
       );
 
       return SavedPick(
-        teamName: team == 'home' ? game.homeTeam : game.awayTeam,
-        opponent: team == 'home' ? game.awayTeam : game.homeTeam,
-        betType: betType,
-        spreadValue: betType == 'spread' ? outcome.point : null,
-        odds: outcome.price,
+        teamName: helper.isHome ? game.homeTeam : game.awayTeam,
+        opponent: helper.isHome ? game.awayTeam : game.homeTeam,
+        betType: helper.betType,
+        spreadValue: helper.betType == 'spread' ? outcome.point : null,
+        price: double.parse(outcome.price.toString()),
       );
     }).toList();
   }
@@ -473,7 +532,7 @@ class _ParlayScreenState extends State<ParlayScreen> {
                       : games.isEmpty 
                         ? Center(child: Text('No games available'))
                         : RefreshIndicator(
-                            onRefresh: _loadMockData,
+                            onRefresh: _loadGames,
                             child: ListView.builder(
                               controller: _scrollController,
                               padding: EdgeInsets.fromLTRB(16, 0, 16, 100),
@@ -520,7 +579,7 @@ class _ParlayScreenState extends State<ParlayScreen> {
           bottomNavigationBar: parlayState.selectedPicks.isNotEmpty
             ? ParlaySummaryBar(
                 numPicks: parlayState.selectedPicks.length,
-                odds: _calculateTotalOdds(),
+                price: parlayState.calculateTotalOdds(), // Use the state's calculated odds
                 onTap: _showParlayDetails,
               )
             : null,

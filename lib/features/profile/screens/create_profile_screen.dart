@@ -63,7 +63,6 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
         });
       }
     } catch (e) {
-      print('Error picking/cropping image: $e');
     }
   }
 
@@ -197,7 +196,6 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
         );
       }
     } catch (e) {
-      print('Error creating profile: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error creating profile')),
       );

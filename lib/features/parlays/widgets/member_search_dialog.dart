@@ -32,7 +32,6 @@ class _MemberSearchDialogState extends State<MemberSearchDialog> {
       final results = await UserProfileService().searchUsers(query);
       setState(() => _searchResults = results);
     } catch (e) {
-      print('Error searching users: $e');
     }
   }
 

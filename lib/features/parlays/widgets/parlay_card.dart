@@ -51,7 +51,9 @@ class _ParlayCardState extends State<ParlayCard> {
 
   @override
   Widget build(BuildContext context) {
-    final totalOdds = widget.parlayState.calculateTotalOdds();
+    final decimalOdds = widget.parlayState.selectedPicks.isEmpty 
+      ? 1.0 
+      : widget.parlayState.calculateTotalOdds();
     
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -105,10 +107,16 @@ class _ParlayCardState extends State<ParlayCard> {
                               border: OutlineInputBorder(),
                             ),
                             value: parlayState.selectedGroupId,
-                            items: widget.userGroups.map((group) => DropdownMenuItem(
-                              value: group.id,
-                              child: Text(group.name),
-                            )).toList(),
+                            items: [
+                              DropdownMenuItem(
+                                value: null,
+                                child: Text('Select a Group'),
+                              ),
+                              ...widget.userGroups.map((group) => DropdownMenuItem(
+                                value: group.id,
+                                child: Text(group.name),
+                              )).toList(),
+                            ],
                             onChanged: (value) => parlayState.setSelectedGroup(value),
                           ),
                         ),
@@ -173,12 +181,32 @@ class _ParlayCardState extends State<ParlayCard> {
                               ],
                             ),
                             // Odds
-                            Text(
-                              'Total Odds: ${totalOdds >= 0 ? "+$totalOdds" : totalOdds}',
-                              style: TextStyle(
-                                color: Colors.blue,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            Consumer<ParlayState>(
+                              builder: (context, state, _) {
+                                final decimalOdds = state.selectedPicks.isEmpty 
+                                  ? 1.0 
+                                  : state.calculateTotalOdds();
+                                
+                                // Debug prints
+                                print('\n=== Parlay Odds Calculation ===');
+                                for (final pickId in state.selectedPicks) {
+                                  final odds = state.getOddsForPick(pickId);
+                                  print('Pick: $pickId');
+                                  print('Decimal odds: $odds');
+                                  print('American odds: ${OddsCalculator.formatOdds(odds)}');
+                                }
+                                print('Total decimal odds: $decimalOdds');
+                                print('Total American odds: ${OddsCalculator.formatOdds(decimalOdds)}');
+                                print('===========================\n');
+
+                                return Text(
+                                  'Total Odds: ${OddsCalculator.formatOdds(decimalOdds)}',
+                                  style: TextStyle(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -204,9 +232,18 @@ class _ParlayCardState extends State<ParlayCard> {
                               ),
                             ),
                             SizedBox(width: 16),
-                            Text(
-                              'Return: ${(widget.parlayState.units * OddsCalculator.usToDecimal(totalOdds)).toStringAsFixed(2)} Units',
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                            Consumer<ParlayState>(
+                              builder: (context, state, _) {
+                                final decimalOdds = state.selectedPicks.isEmpty 
+                                  ? 1.0 
+                                  : state.calculateTotalOdds();
+                                final returnAmount = state.units * decimalOdds;
+                                
+                                return Text(
+                                  'Return: ${returnAmount.toStringAsFixed(2)} Units',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -217,57 +254,76 @@ class _ParlayCardState extends State<ParlayCard> {
                         padding: EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: parlayState.selectedPicks.map((pickId) {
-                            final details = parlayState.getGameDetails(pickId);
-                            final betType = pickId.split('-')[1];
-                            final odds = parlayState.getFormattedOdds(pickId);
-                            
-                            return Card(
-                              margin: EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: Colors.grey[200],
-                                  child: _buildTeamLogo(details['team'] ?? ''),
-                                ),
-                                title: Text(details['team'] ?? ''),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('${betType[0].toUpperCase()}${betType.substring(1)} vs ${details['opponent']}'),
-                                    if (betType == 'spread') ...[
+                          children: [
+                            Text(
+                              'Selected Picks',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            SizedBox(height: 8),
+                            ...parlayState.selectedPicks.map((pickId) {
+                              // Update parsing to handle new format: gameId_team_betType
+                              final parts = pickId.split('_');
+                              final gameId = parts[0];
+                              final team = parts[1];  // 'home' or 'away'
+                              final betType = parts[2];  // 'spread' or 'moneyline'
+                              
+                              final game = parlayState.getGameById(gameId);
+                              if (game == null) {
+                                return SizedBox.shrink();
+                              }
+                              
+                              final details = parlayState.getGameDetails(pickId);
+                              
+                              return Card(
+                                key: ValueKey(pickId),
+                                margin: EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.grey[200],
+                                    child: _buildTeamLogo(details['team'] ?? ''),
+                                  ),
+                                  title: Text(details['team'] ?? ''),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('${betType[0].toUpperCase()}${betType.substring(1)} vs ${details['opponent']}'),
+                                      if (betType == 'spread') ...[
+                                        Text(
+                                          getSpreadDisplay(pickId),
+                                          style: TextStyle(color: Colors.blue),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 15,
+                                        backgroundColor: Colors.grey[200],
+                                        backgroundImage: widget.userProfile.photoURL != null 
+                                            ? NetworkImage(widget.userProfile.photoURL!)
+                                            : null,
+                                        child: widget.userProfile.photoURL == null 
+                                            ? Icon(Icons.person_outline, size: 20, color: Colors.indigo)
+                                            : null,
+                                      ),
+                                      SizedBox(width: 8),
                                       Text(
-                                        getSpreadDisplay(pickId),
-                                        style: TextStyle(color: Colors.blue),
+                                        betType == 'spread' 
+                                            ? getSpreadDisplay(pickId)
+                                            : getMoneylineOdds(pickId)
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.close),
+                                        onPressed: () => parlayState.removePick(pickId),
                                       ),
                                     ],
-                                  ],
+                                  ),
                                 ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 15,
-                                      backgroundColor: Colors.grey[200],
-                                      backgroundImage: widget.userProfile.photoURL != null 
-                                          ? NetworkImage(widget.userProfile.photoURL!)
-                                          : null,
-                                      child: widget.userProfile.photoURL == null 
-                                          ? Icon(Icons.person_outline, size: 20, color: Colors.indigo)
-                                          : null,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(betType == 'spread' 
-                                        ? details['details']?.toString().split(' ').last ?? ''
-                                        : getMoneylineOdds(pickId)),
-                                    IconButton(
-                                      icon: Icon(Icons.close),
-                                      onPressed: () => parlayState.removePick(pickId),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
+                              );
+                            }).toList(),
+                          ],
                         ),
                       ),
 
@@ -279,10 +335,7 @@ class _ParlayCardState extends State<ParlayCard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Add debug prints here, outside of the widget tree
                               Builder(builder: (context) {
-                                print('DEBUG - Member Photos Map: ${widget.memberPhotos}');
-                                print('DEBUG - User Groups: ${widget.userGroups.map((g) => g.members.map((m) => '${m.id}: ${m.name}').join(', ')).join('\n')}');
                                 return SizedBox.shrink();
                               }),
                               Text(
@@ -290,9 +343,6 @@ class _ParlayCardState extends State<ParlayCard> {
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
                               ...parlayState.placeholderPicks.map((pick) {
-                                print('DEBUG - Placeholder Pick: ${pick.id}');
-                                print('DEBUG - Assigned User ID: ${pick.assignedUserId}');
-                                print('DEBUG - Photo URL for user: ${widget.memberPhotos[pick.assignedUserId]}');
                                 
                                 return Card(
                                   margin: EdgeInsets.only(bottom: 8),
@@ -314,15 +364,20 @@ class _ParlayCardState extends State<ParlayCard> {
                                         DropdownButton<String>(
                                           hint: Text('Select User'),
                                           value: pick.assignedUserId,
-                                          items: widget.userGroups
-                                              .expand((group) => group.members)
-                                              .map((member) => DropdownMenuItem(
-                                                    value: member.userId,
-                                                    child: Text(member.name),
-                                                  ))
-                                              .toList(),
-                                          onChanged: (value) =>
-                                              parlayState.assignUserToPlaceholder(pick.id, value),
+                                          items: [
+                                            DropdownMenuItem(
+                                              value: null,
+                                              child: Text('Select User'),
+                                            ),
+                                            ...widget.userGroups
+                                                .expand((group) => group.members)
+                                                .map((member) => DropdownMenuItem(
+                                                      value: member.userId,
+                                                      child: Text(widget.memberNames[member.userId] ?? 'Unknown User'),
+                                                    ))
+                                                .toList(),
+                                          ],
+                                          onChanged: (value) => parlayState.assignUserToPlaceholder(pick.id, value),
                                         ),
                                         IconButton(
                                           icon: Icon(Icons.close),
@@ -366,52 +421,37 @@ class _ParlayCardState extends State<ParlayCard> {
   }
 
   String getSpreadDisplay(String pickId) {
-    final pick = PickHelper(pickId);
-    final game = widget.parlayState.getGameById(pick.gameId);
-    if (game == null) return "0";
-    
-    final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
-    final bookmaker = BettingHelper.getBookmaker(game);
-    final market = BettingHelper.getMarket(bookmaker, 'spread');
-    final outcome = BettingHelper.getOutcome(market, selectedTeam);
-    
-    final point = outcome.point ?? 0;
-    return point >= 0 ? '+$point' : point.toString();
-  }
-
-  String formatOdds(int odds) {
-    if (odds >= 0) {
-      return '+$odds';
+    try {
+      final pick = PickHelper(pickId);
+      final game = widget.parlayState.getGameById(pick.gameId);
+      if (game == null) return "0";
+      
+      final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+      final bookmaker = BettingHelper.getBookmaker(game);
+      final market = BettingHelper.getMarket(bookmaker, 'spread');
+      final outcome = BettingHelper.getOutcome(market, selectedTeam);
+      
+      return OddsCalculator.formatOdds(outcome.price);
+    } catch (e) {
+      return "0";
     }
-    return odds.toString();
   }
 
   String getMoneylineOdds(String pickId) {
-    final parts = pickId.split('-');
-    final gameId = parts[0];
-    final team = parts[2];
-    final game = widget.parlayState.getGameById(gameId);
-    
+    final game = widget.parlayState.getGameById(pickId.split('_')[0]);
     if (game == null) return "0";
-    
-    final bookmaker = game.bookmakers.firstWhere(
-      (b) => b.key == 'fanduel',
-      orElse: () => game.bookmakers.first,
-    );
-    
-    final moneyline = bookmaker.markets.firstWhere(
-      (m) => m.key == 'h2h',
-      orElse: () => Market(key: 'h2h', lastUpdate: DateTime.now(), outcomes: []),
-    );
-    
-    final actualTeam = team == 'home' ? game.homeTeam : game.awayTeam;
-    
-    final outcome = moneyline.outcomes.firstWhere(
-      (o) => o.name == actualTeam,
-      orElse: () => Outcome(name: '', price: 0, point: 0),
-    );
-    
-    return outcome.price >= 0 ? '+${outcome.price}' : '${outcome.price}';
+
+    try {
+      final pick = PickHelper(pickId);
+      final selectedTeam = pick.isHome ? game.homeTeam : game.awayTeam;
+      final bookmaker = BettingHelper.getBookmaker(game);
+      final market = BettingHelper.getMarket(bookmaker, 'h2h');
+      final outcome = BettingHelper.getOutcome(market, selectedTeam);
+      
+      return OddsCalculator.formatOdds(outcome.price);
+    } catch (e) {
+      return "PK";
+    }
   }
 
   Widget _buildTeamLogo(String teamName) {

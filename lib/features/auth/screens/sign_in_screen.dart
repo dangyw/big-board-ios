@@ -26,10 +26,8 @@ class SignInScreen extends StatelessWidget {
                 try {
                   final result = await authService.signInWithApple();
                   if (result?.user != null) {
-                    print('Signed in: ${result?.user?.id}');
                   }
                 } catch (e) {
-                  print('Error signing in: $e');
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Sign in failed: $e')),

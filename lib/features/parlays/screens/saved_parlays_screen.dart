@@ -117,9 +117,7 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
                         ],
                       ),
                       trailing: Text(
-                        pick.betType == 'Spread'
-                            ? '${pick.spreadValue} (${OddsCalculator.formatOdds(pick.odds)})'
-                            : OddsCalculator.formatOdds(pick.odds),
+                        getDisplayOdds(pick),
                         style: TextStyle(
                           color: Colors.blue[700],
                           fontWeight: FontWeight.w600,
@@ -177,7 +175,6 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
           SnackBar(content: Text('Parlay deleted')),
         );
       } catch (e) {
-        print('Error deleting parlay: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error deleting parlay')),
         );
@@ -189,5 +186,12 @@ class _SavedParlaysScreenState extends State<SavedParlaysScreen> {
   void dispose() {
     _parlayService.dispose();
     super.dispose();
+  }
+
+  String getDisplayOdds(SavedPick pick) {
+    if (pick.betType == 'spread') {
+      return '${pick.spreadValue} (${OddsCalculator.formatOdds(pick.price)})';
+    }
+    return OddsCalculator.formatOdds(pick.price);
   }
 } 

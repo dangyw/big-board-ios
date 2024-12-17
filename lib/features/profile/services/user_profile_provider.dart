@@ -35,7 +35,6 @@ class UserProfileProvider extends ChangeNotifier {
       
       _profile = UserProfile.fromMap(data, data['user_id']);
     } catch (e) {
-      print('Error loading profile: $e');
     } finally {
       _loading = false;
       notifyListeners();
@@ -70,7 +69,6 @@ class UserProfileProvider extends ChangeNotifier {
       _profile = UserProfile.fromMap(data, data['user_id']);
       notifyListeners();
     } catch (e) {
-      print('Error updating profile: $e');
       rethrow;
     }
   }
@@ -78,7 +76,6 @@ class UserProfileProvider extends ChangeNotifier {
   Future<bool> hasProfile() async {
     try {
       final user = _supabase.auth.currentUser;
-      print('Checking profile for user: ${user?.id}');
       if (user == null) return false;
 
       final response = await _supabase
@@ -87,10 +84,8 @@ class UserProfileProvider extends ChangeNotifier {
           .eq('user_id', user.id)
           .maybeSingle();  // Returns null if no profile exists
       
-      print('Profile check response: $response');
       return response != null;
     } catch (error) {
-      print('Error checking profile existence: $error');
       return false;
     }
   }
@@ -127,7 +122,6 @@ class UserProfileProvider extends ChangeNotifier {
       _profile = UserProfile.fromMap(response, response['user_id']);
       notifyListeners();
     } catch (error) {
-      print('Error creating initial profile: $error');
       rethrow;
     } finally {
       _loading = false;
@@ -145,7 +139,6 @@ class UserProfileProvider extends ChangeNotifier {
       _profileController.add(_profile);
       notifyListeners();
     } catch (e) {
-      print('Error updating unit value: $e');
       rethrow;
     }
   }
@@ -160,20 +153,15 @@ class UserProfileProvider extends ChangeNotifier {
       _profileController.add(_profile);
       notifyListeners();
     } catch (e) {
-      print('Error updating bankroll: $e');
       rethrow;
     }
   }
 
   // Add the getter
   Stream<UserProfile?> get profileStream {
-    print('Starting profile stream...'); // Debug print
-    
     final user = _supabase.auth.currentUser;
-    print('Current user: ${user?.id}'); // Debug print
     
     if (user == null) {
-      print('No user found in profileStream'); // Debug print
       return Stream.value(null);
     }
 
@@ -183,23 +171,17 @@ class UserProfileProvider extends ChangeNotifier {
           .stream(primaryKey: ['id'])
           .eq('user_id', user.id)
           .map((event) {
-            print('Received stream event: $event'); // Debug print
             if (event.isEmpty) {
-              print('No profile data found for user ${user.id}');
               return null;
             }
             try {
               final profile = UserProfile.fromJson(event.first);
-              print('Successfully parsed profile: ${profile.displayName}');
               return profile;
             } catch (e) {
-              print('Error parsing profile: $e');
-              print('Raw data: ${event.first}');
               return null;
             }
           });
     } catch (e) {
-      print('Error setting up profile stream: $e');
       return Stream.value(null);
     }
   }
@@ -239,7 +221,6 @@ class UserProfileProvider extends ChangeNotifier {
       
       return imageUrl;
     } catch (e) {
-      print('Error uploading profile image: $e');
       throw Exception('Failed to upload profile image');
     }
   }
@@ -257,7 +238,7 @@ class UserProfileProvider extends ChangeNotifier {
       _profileController.add(_profile);
       notifyListeners();
     } catch (e) {
-      print('Error updating avatar URL: $e');
+      ('Error updating avatar URL: $e');
       throw Exception('Failed to update avatar URL');
     }
   }
@@ -285,7 +266,6 @@ class UserProfileProvider extends ChangeNotifier {
       _profileController.add(_profile);
       notifyListeners();
     } catch (e) {
-      print('Error removing profile image: $e');
       throw Exception('Failed to remove profile image');
     }
   }

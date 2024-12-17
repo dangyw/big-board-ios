@@ -14,8 +14,6 @@ class AuthService {
   // Stream of auth state changes
   Stream<User?> get authStateChanges => _supabase.auth.onAuthStateChange
       .map((event) {
-        print('Auth state change event: ${event.event}'); // Debug log
-        print('User in event: ${event.session?.user?.id}'); // Debug log
         return event.session?.user;
       });
 
@@ -24,8 +22,6 @@ class AuthService {
     try {
       final rawNonce = generateNonce();
       final hashedNonce = sha256ofString(rawNonce);
-
-      print('Starting Apple sign in process...'); // Debug log
 
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
@@ -39,16 +35,12 @@ class AuthService {
         nonce: hashedNonce,
       );
 
-      print('Got Apple credential'); // Debug log
-
       // Sign in with Supabase
       final authResponse = await _supabase.auth.signInWithIdToken(
         provider: OAuthProvider.apple,
         idToken: credential.identityToken!,
         nonce: rawNonce,
       );
-
-      print('Got Supabase auth response: ${authResponse.session?.user?.id}'); // Debug log
 
       // Important: Wait for auth to be fully processed
       await Future.delayed(Duration(milliseconds: 500));
@@ -57,12 +49,10 @@ class AuthService {
       if (authResponse.session?.user != null) {
         final userId = authResponse.session!.user.id;
         final hasExistingProfile = await _profileService.hasProfile(userId);
-        print('Has existing profile: $hasExistingProfile'); // Debug log
         
         if (!hasExistingProfile && 
             credential.givenName != null && 
             credential.familyName != null) {
-          print('Creating new profile...'); // Debug log
           
           // Create profile
           final profile = UserProfile(
@@ -80,17 +70,14 @@ class AuthService {
 
           // Wait for profile creation to complete
           await _profileService.createInitialProfile(profile);
-          print('Profile created successfully'); // Debug log
           
           // Verify profile was created
           final profileVerified = await _profileService.hasProfile(userId);
-          print('Profile verification after creation: $profileVerified'); // Debug log
         }
       }
 
       return authResponse;
     } catch (error) {
-      print('Error in signInWithApple: $error'); // Debug log
       throw Exception('Error signing in with Apple: $error');
     }
   }
@@ -113,4 +100,4 @@ class AuthService {
   Future<void> signOut() async {
     await _supabase.auth.signOut();
   }
-} 
+}

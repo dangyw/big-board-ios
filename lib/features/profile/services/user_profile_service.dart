@@ -20,7 +20,6 @@ class UserProfileService {
       }
       return null;
     } catch (e) {
-      print('Error getting profile: $e');
       return null;
     }
   }
@@ -39,7 +38,6 @@ class UserProfileService {
         'parlay_count': 0,
       });
     } catch (e) {
-      print('Error creating profile: $e');
       rethrow;
     }
   }
@@ -51,7 +49,6 @@ class UserProfileService {
           .update(profile.toMap())
           .eq('user_id', profile.userId);
     } catch (e) {
-      print('Error updating profile: $e');
       rethrow;
     }
   }
@@ -73,7 +70,6 @@ class UserProfileService {
           .update({'bankroll': newAmount})
           .eq('user_id', userId);
     } catch (e) {
-      print('Error updating bankroll: $e');
       rethrow;
     }
   }
@@ -85,7 +81,6 @@ class UserProfileService {
         params: {'user_id_param': userId}
       );
     } catch (e) {
-      print('Error incrementing parlay count: $e');
       rethrow;
     }
   }
@@ -99,7 +94,6 @@ class UserProfileService {
           .single();
       return response != null;
     } catch (e) {
-      print('Error checking profile: $e');
       return false;
     }
   }
@@ -123,7 +117,6 @@ class UserProfileService {
 
       return imageUrl;
     } catch (e) {
-      print('Error uploading profile image: $e');
       return null;
     }
   }
@@ -150,7 +143,6 @@ class UserProfileService {
           .map<UserProfile>((json) => UserProfile.fromJson(json))
           .toList();
     } catch (e) {
-      print('Error searching users: $e');
       return []; // Return empty list instead of null on error
     }
   }

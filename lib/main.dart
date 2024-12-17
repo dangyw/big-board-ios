@@ -10,8 +10,12 @@ import 'package:big_board/features/profile/services/user_profile_provider.dart';
 import 'package:big_board/features/profile/screens/create_profile_screen.dart';
 import 'package:big_board/features/parlays/screens/parlay_screen.dart';
 import 'features/parlays/state/parlay_provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:get_storage/get_storage.dart';
 
 void main() async {
+  await GetStorage.init();
+  await dotenv.load(fileName: ".env");
   WidgetsFlutterBinding.ensureInitialized();
   
   await Supabase.initialize(

@@ -46,7 +46,7 @@ class GroupMemberAssignments extends StatelessWidget {
             itemCount: memberNames.length,
             itemBuilder: (context, index) {
               final memberId = memberNames.keys.elementAt(index);
-              final memberName = memberNames[memberId] ?? 'Unknown';
+              final memberName = memberNames[memberId] ?? 'Unknown User';
               final photoUrl = memberPhotos[memberId];
               final pickCount = allocations[memberId] ?? 0;
               

@@ -27,9 +27,7 @@ class ProfileScreen extends StatelessWidget {
       body: StreamBuilder<UserProfile?>(
         stream: context.read<UserProfileProvider>().profileStream,
         builder: (context, snapshot) {
-          print('StreamBuilder state: ${snapshot.connectionState}'); // Debug print
-          print('StreamBuilder data: ${snapshot.data}'); // Debug print
-          print('StreamBuilder error: ${snapshot.error}'); // Debug print
+
           
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
@@ -37,7 +35,6 @@ class ProfileScreen extends StatelessWidget {
 
           final profile = snapshot.data;
           if (profile == null) {
-            print('Profile is null'); // Debug print
             return Center(child: Text('Error loading profile'));
           }
 
@@ -203,9 +200,7 @@ class ProfileScreen extends StatelessWidget {
       if (croppedFile != null) {
         return File(croppedFile.path);
       }
-    } catch (e) {
-      print('Error picking/cropping image: $e');
-    }
+    } catch (e) {}
     return null;
   }
 

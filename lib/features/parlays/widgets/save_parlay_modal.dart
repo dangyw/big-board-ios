@@ -6,14 +6,14 @@ import 'package:big_board/core/utils/odds_calculator.dart';
 
 class SaveParlayModal extends StatefulWidget {
   final List<SavedPick> picks;
-  final int totalOdds;
+  final double decimalOdds;
   final Function(double, String?) onSave;
   final List<Group> userGroups;
 
   const SaveParlayModal({
     Key? key,
     required this.picks,
-    required this.totalOdds,
+    required this.decimalOdds,
     required this.onSave,
     required this.userGroups,
   }) : super(key: key);
@@ -37,9 +37,12 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
       }
 
       final units = double.tryParse(value) ?? 0;
-      final decimal = OddsCalculator.usToDecimal(widget.totalOdds);
-      _potentialPayout = units * decimal;
+      _potentialPayout = units * widget.decimalOdds;
     });
+  }
+
+  String getDisplayOdds(SavedPick pick) {
+    return OddsCalculator.formatOdds(pick.price);
   }
 
   @override
@@ -71,9 +74,7 @@ class _SaveParlayModalState extends State<SaveParlayModal> {
                     ),
                   ),
                   Text(
-                    pick.betType == 'Spread' 
-                        ? '${pick.spreadValue} (${pick.odds > 0 ? '+' : ''}${pick.odds})'
-                        : '${pick.odds > 0 ? '+' : ''}${pick.odds}',
+                    getDisplayOdds(pick),
                     style: TextStyle(color: Colors.blue),
                   ),
                 ],

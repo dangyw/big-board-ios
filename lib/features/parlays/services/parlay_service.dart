@@ -34,7 +34,6 @@ class ParlayService {
       await _initParlayStream(groupId);
 
     } catch (e) {
-      print('Error in getParlays: $e');
       yield [];
     }
   }
@@ -56,7 +55,6 @@ class ParlayService {
       final parlays = data.map((json) => SavedParlay.fromJson(json)).toList();
       _streamController.add(parlays);
     } catch (e) {
-      print('Error refreshing parlays: $e');
     }
   }
 
@@ -84,18 +82,16 @@ class ParlayService {
             'parlay_id': parlayId,
             'assigned_member_id': pick.assignedUserId,
             'status': 'pending',
-            'team_name': pick.teamName,
-            'opponent': pick.opponent,
-            'bet_type': pick.betType,
+            'team_name': pick.teamName ?? '',
+            'opponent': pick.opponent ?? '',
+            'bet_type': pick.betType ?? '',
             'spread_value': pick.spreadValue,
-            'odds': pick.odds,
           });
         }
       }
 
       await _refreshParlays(groupId: parlay.groupId);
     } catch (e) {
-      print('Error saving parlay: $e');
       rethrow;
     }
   }
@@ -109,14 +105,11 @@ class ParlayService {
           .from('parlays')
           .delete()
           .eq('id', parlayId);
-        
-      print('Parlay deleted successfully: $parlayId');
-      
+              
       // Force refresh after delete
       await _refreshParlays();
       
     } catch (e) {
-      print('Error deleting parlay: $e');
       rethrow;
     }
   }
@@ -131,7 +124,6 @@ class ParlayService {
 
       return _streamController.stream;
     } catch (e) {
-      print('Error in getGroupParlays: $e');
       rethrow;
     }
   }
@@ -150,7 +142,6 @@ class ParlayService {
       final parlays = data.map((json) => SavedParlay.fromJson(json)).toList();
       _streamController.add(parlays);
     } catch (e) {
-      print('Error refreshing group parlays: $e');
     }
   }
 
@@ -171,7 +162,6 @@ class ParlayService {
         'created_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('Error inviting to parlay: $e');
       rethrow;
     }
   }
@@ -183,7 +173,6 @@ class ParlayService {
         params: {'invitation_id_param': invitationId},
       );
     } catch (e) {
-      print('Error accepting invitation: $e');
       rethrow;
     }
   }
@@ -195,7 +184,6 @@ class ParlayService {
           .update({'status': 'declined'})
           .eq('id', invitationId);
     } catch (e) {
-      print('Error declining invitation: $e');
       rethrow;
     }
   }
@@ -212,7 +200,6 @@ class ParlayService {
           .map((data) => ParlayInvitation.fromMap(data))
           .toList();
     } catch (e) {
-      print('Error getting pending invitations: $e');
       rethrow;
     }
   }
@@ -283,7 +270,6 @@ class ParlayService {
       });
 
     } catch (e) {
-      print('Error in _initParlayStream: $e');
     }
   }
 
@@ -298,7 +284,7 @@ class ParlayService {
         'opponent': pick.opponent,
         'bet_type': pick.betType,
         'spread_value': pick.spreadValue,
-        'odds': pick.odds,
+        'price': pick.price,
         'status': 'completed'
       })
       .eq('parlay_id', parlayId)
@@ -306,7 +292,6 @@ class ParlayService {
 
       await _refreshParlays();
     } catch (e) {
-      print('Error updating placeholder pick: $e');
       rethrow;
     }
   }

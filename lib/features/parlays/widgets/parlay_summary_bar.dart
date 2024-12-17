@@ -3,7 +3,7 @@ import 'package:big_board/core/utils/odds_calculator.dart';
 
 class ParlaySummaryBar extends StatelessWidget {
   final int numPicks;
-  final int odds;
+  final double price;
   final VoidCallback onTap;
   final bool isGroupParlay;
   final int? completedPicks;
@@ -11,7 +11,7 @@ class ParlaySummaryBar extends StatelessWidget {
   const ParlaySummaryBar({
     Key? key,
     required this.numPicks,
-    required this.odds,
+    required this.price,
     required this.onTap,
     this.isGroupParlay = false,
     this.completedPicks,
@@ -58,7 +58,10 @@ class ParlaySummaryBar extends StatelessWidget {
                       )
                     else
                       Text(
-                        'Odds: ${OddsCalculator.formatOdds(odds)}',
+                        () {
+                          final formatted = OddsCalculator.formatOdds(price);
+                          return 'Odds: $formatted';
+                        }(),
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.blue,

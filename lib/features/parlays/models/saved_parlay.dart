@@ -6,7 +6,7 @@ class SavedParlay {
   final String userId;
   final DateTime createdAt;
   final List<SavedPick> picks;
-  final int totalOdds;
+  final double totalOdds;
   final double units;
   final String status;
   final String? result;
@@ -36,9 +36,7 @@ class SavedParlay {
     'events': picks.map((pick) => pick.toJson()).toList(),
     'odds': totalOdds,
     'stake': units,
-    'potential_payout': units > 0 ? units * ((totalOdds > 0) 
-        ? (totalOdds / 100) + 1 
-        : 1 - (100 / totalOdds)) : 0,
+    'potential_payout': units * totalOdds,
     'status': status,
     'result': result,
     'settled_at': settledAt?.toIso8601String(),
@@ -49,7 +47,6 @@ class SavedParlay {
   factory SavedParlay.fromJson(Map<String, dynamic> json) {
     final units = json['stake']?.toDouble() ?? 0.0;
     if (units <= 0) {
-      print('Warning: Invalid units found in parlay: $units');
     }
     
     return SavedParlay(
@@ -59,7 +56,7 @@ class SavedParlay {
       picks: (json['events'] as List)
           .map((p) => SavedPick.fromJson(p))
           .toList(),
-      totalOdds: json['odds'],
+      totalOdds: (json['odds'] as num).toDouble(),
       units: units > 0 ? units : 0.01,
       status: json['status'] ?? 'pending',
       result: json['result'],
@@ -103,14 +100,14 @@ class SavedPick {
   final String opponent;
   final String betType;
   final double? spreadValue;
-  final int odds;
+  final double price;
 
   SavedPick({
     required this.teamName,
     required this.opponent,
     required this.betType,
     this.spreadValue,
-    required this.odds,
+    required this.price,
   });
 
   Map<String, dynamic> toJson() => {
@@ -118,7 +115,7 @@ class SavedPick {
     'opponent': opponent,
     'betType': betType,
     'spreadValue': spreadValue,
-    'odds': odds,
+    'price': price,
   };
 
   factory SavedPick.fromJson(Map<String, dynamic> json) {
@@ -127,7 +124,7 @@ class SavedPick {
       opponent: json['opponent'],
       betType: json['betType'],
       spreadValue: json['spreadValue']?.toDouble(),
-      odds: json['odds'],
+      price: json['price']?.toDouble() ?? 1.0,
     );
   }
 } 

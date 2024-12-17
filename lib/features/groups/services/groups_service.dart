@@ -5,23 +5,23 @@ class GroupsService {
   final _supabase = Supabase.instance.client;
 
   Future<List<Group>> getUserGroups(String userId) async {
-      print('\n=== Starting getUserGroups in GroupsService ===\n');  // Add this
     try {
-     print('Fetching groups for user: $userId');  // Add this      
+      print('Fetching groups for user: $userId');
+      
       final groupsResponse = await _supabase
           .from('group_members')
           .select('group_id')
           .eq('user_id', userId);
 
-      print('DEBUG: Raw group_members response: $groupsResponse');
+      print('Initial groups response: $groupsResponse');
 
       if (groupsResponse == null || groupsResponse.isEmpty) {
-        print('No groups found for user: $userId');
+        print('No groups found in group_members table');
         return [];
       }
 
       final groupIds = (groupsResponse as List).map((g) => g['group_id']).toList();
-      print('DEBUG: Found group IDs: $groupIds');
+      print('Found group IDs: $groupIds');
 
       final response = await _supabase
           .from('groups')
@@ -35,25 +35,21 @@ class GroupsService {
           ''')
           .inFilter('id', groupIds);
 
-      print('\nDEBUG: Raw groups response: $response\n');
+      print('Groups table response: $response');
 
       if (response != null && response is List && response.isNotEmpty) {
         for (var group in response) {
-          print('\nProcessing group: ${group['name']}');
           if (group['group_members'] != null) {
             for (var member in group['group_members']) {
-              print('\nFetching profile for member: ${member['user_id']}');
               final profileResponse = await _supabase
                   .from('user_profiles')
                   .select()
                   .eq('user_id', member['user_id'])
                   .single();
               
-              print('Profile response: $profileResponse');
               
               if (profileResponse != null) {
                 member['user_profiles'] = profileResponse;
-                print('Added profile to member: ${member['user_profiles']}');
               }
             }
           }
@@ -63,13 +59,11 @@ class GroupsService {
             .map((group) => Group.fromJson(group))
             .toList();
         
-        print('\n=== Final processed groups: $groups ===\n');
         return groups;
       }
 
       return [];
     } catch (e) {
-      print('Error fetching user groups: $e');
       return [];
     }
   }
@@ -105,7 +99,6 @@ class GroupsService {
       return getUserGroups(ownerId)
           .then((groups) => groups.firstWhere((g) => g.id == groupResponse['id']));
     } catch (e) {
-      print('Error creating group: $e');
       return null;
     }
   }
@@ -120,7 +113,6 @@ class GroupsService {
           });
       return true;
     } catch (e) {
-      print('Error adding member to group: $e');
       return false;
     }
   }
@@ -136,7 +128,6 @@ class GroupsService {
           });
       return true;
     } catch (e) {
-      print('Error removing member from group: $e');
       return false;
     }
   }

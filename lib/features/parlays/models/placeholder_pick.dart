@@ -4,7 +4,7 @@ class PlaceholderPick {
   final String? opponent;
   final String? betType;
   final double? spreadValue;
-  final int? odds;
+  final double? odds;
   final String? assignedUserId;
 
   PlaceholderPick({
@@ -17,13 +17,15 @@ class PlaceholderPick {
     this.assignedUserId,
   });
 
+  double get price => odds ?? 0.0;
+
   PlaceholderPick copyWith({
     String? id,
     String? teamName,
     String? opponent,
     String? betType,
     double? spreadValue,
-    int? odds,
+    double? odds,
     String? assignedUserId,
   }) {
     return PlaceholderPick(
@@ -53,7 +55,7 @@ class PlaceholderPick {
     opponent: json['opponent'],
     betType: json['betType'],
     spreadValue: json['spreadValue']?.toDouble(),
-    odds: json['odds'],
+    odds: json['odds']?.toDouble(),
     assignedUserId: json['assigned_member_id'],
   );
 } 
