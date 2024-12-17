@@ -1,3 +1,6 @@
+import 'package:big_board/core/utils/odds_calculator.dart';
+import 'dart:math';
+
 class Game {
   final String id;
   final String sportKey;
@@ -30,6 +33,64 @@ class Game {
           .toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'sport_key': sportKey,
+    'sport_title': sportTitle,
+    'commence_time': commenceTime.toIso8601String(),
+    'home_team': homeTeam,
+    'away_team': awayTeam,
+    'bookmakers': bookmakers.map((b) => b.toJson()).toList(),
+  };
+
+  Outcome? get homeOutcome {
+    final market = bookmakers.firstOrNull?.markets.firstOrNull;
+    return market?.outcomes.firstWhere(
+      (o) => o.name == homeTeam,
+      orElse: () => Outcome(name: homeTeam, price: 0),
+    );
+  }
+
+  Outcome? get awayOutcome {
+    final market = bookmakers.firstOrNull?.markets.firstOrNull;
+    return market?.outcomes.firstWhere(
+      (o) => o.name == awayTeam,
+      orElse: () => Outcome(name: awayTeam, price: 0),
+    );
+  }
+
+  Outcome? get overOutcome {
+    final market = bookmakers.firstOrNull?.markets
+        .firstWhere((m) => m.key == 'totals', 
+            orElse: () => Market(key: '', lastUpdate: DateTime.now(), outcomes: []));
+    if (market == null) return null;
+    
+    try {
+      return market.outcomes.firstWhere(
+        (o) => o.name.toLowerCase() == 'over',
+        orElse: () => Outcome(name: 'over', price: 0),
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Outcome? get underOutcome {
+    final market = bookmakers.firstOrNull?.markets
+        .firstWhere((m) => m.key == 'totals', 
+            orElse: () => Market(key: '', lastUpdate: DateTime.now(), outcomes: []));
+    if (market == null) return null;
+    
+    try {
+      return market.outcomes.firstWhere(
+        (o) => o.name.toLowerCase() == 'under',
+        orElse: () => Outcome(name: 'under', price: 0),
+      );
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 class Bookmaker {
@@ -55,6 +116,13 @@ class Bookmaker {
           .toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'title': title,
+    'last_update': lastUpdate.toIso8601String(),
+    'markets': markets.map((m) => m.toJson()).toList(),
+  };
 }
 
 class Market {
@@ -69,32 +137,60 @@ class Market {
   });
 
   factory Market.fromJson(Map<String, dynamic> json) {
-    return Market(
+
+    final market = Market(
       key: json['key'],
       lastUpdate: DateTime.parse(json['last_update']),
       outcomes: (json['outcomes'] as List)
-          .map((o) => Outcome.fromJson(o))
+          .map((o) {
+
+            final outcome = Outcome.fromJson(o);
+            return outcome;
+          })
           .toList(),
     );
+    
+    return market;
   }
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'last_update': lastUpdate.toIso8601String(),
+    'outcomes': outcomes.map((o) => o.toJson()).toList(),
+  };
 }
 
 class Outcome {
   final String name;
-  final int price;
+  final double price;
   final double? point;
 
-  Outcome({
+  const Outcome({
     required this.name,
     required this.price,
     this.point,
   });
 
   factory Outcome.fromJson(Map<String, dynamic> json) {
+    final rawPrice = json['price'] as num;
     return Outcome(
       name: json['name'],
-      price: json['price'],
+      price: rawPrice.toDouble(),
       point: json['point']?.toDouble(),
     );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'price': price,
+    'point': point,
+  };
+
+  int get americanOdds {
+    if (price >= 2.0) {
+      return ((price - 1) * 100).round();
+    } else {
+      return (-100 / (price - 1)).round();
+    }
   }
 } 
